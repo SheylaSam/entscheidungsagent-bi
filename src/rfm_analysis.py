@@ -50,10 +50,12 @@ def compute_rfm(df: pd.DataFrame) -> pd.DataFrame:
     return rfm
 
 
-def load_rfm(conn: sqlite3.Connection) -> pd.DataFrame:
+def load_rfm(conn: sqlite3.Connection, start_date: str, end_date: str) -> pd.DataFrame:
     df = pd.read_sql(
-        "SELECT customer_id, invoice, invoice_date, revenue FROM transactions",
+        "SELECT customer_id, invoice, invoice_date, revenue FROM transactions"
+        " WHERE invoice_date >= ? AND invoice_date <= ?",
         conn,
+        params=(start_date, end_date + ' 23:59:59'),
         parse_dates=['invoice_date'],
     )
     return compute_rfm(df)

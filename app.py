@@ -2,6 +2,7 @@ import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
+from datetime import date
 from src.data_processing import build_database, get_connection
 from src.rfm_analysis import load_rfm
 from src.forecasting import load_forecast
@@ -12,17 +13,42 @@ st.set_page_config(page_title="RetailBI — Entscheidungsagent", layout="wide")
 
 build_database()
 
+# ── Sidebar: Zeitraum-Filter ──────────────────────────────────────────────────
+_MIN_DATE = date(2009, 12, 1)
+_MAX_DATE = date(2011, 12, 9)
+
+st.sidebar.header("Zeitraum")
+date_range = st.sidebar.date_input(
+    "Datumsbereich",
+    value=(_MIN_DATE, _MAX_DATE),
+    min_value=_MIN_DATE,
+    max_value=_MAX_DATE,
+)
+
+if len(date_range) != 2:
+    st.stop()
+
+start_date, end_date = date_range
+st.sidebar.caption(
+    f"{start_date.strftime('%d.%m.%Y')} – {end_date.strftime('%d.%m.%Y')}"
+)
+st.sidebar.divider()
+
+
 @st.cache_data
-def load_all():
+def load_all(start_date: str, end_date: str):
     conn = get_connection()
-    rfm = load_rfm(conn)
-    actuals, forecast = load_forecast(conn)
-    top_products, declining = load_product_analysis(conn)
+    rfm = load_rfm(conn, start_date, end_date)
+    actuals, forecast = load_forecast(conn, start_date, end_date)
+    top_products, declining = load_product_analysis(conn, start_date, end_date)
     conn.close()
     recs = generate_recommendations(forecast, rfm, declining)
     return rfm, actuals, forecast, top_products, declining, recs
 
-rfm, actuals, forecast, top_products, declining, recs = load_all()
+
+rfm, actuals, forecast, top_products, declining, recs = load_all(
+    start_date.isoformat(), end_date.isoformat()
+)
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📊 Übersicht", "📈 Forecast", "👥 Kunden RFM", "📦 Produkte", "🤖 KI-Entscheid"

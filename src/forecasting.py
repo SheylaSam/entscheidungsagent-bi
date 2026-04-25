@@ -17,10 +17,11 @@ except ValueError:
 from prophet import Prophet
 
 
-def prepare_monthly_series(conn: sqlite3.Connection) -> pd.DataFrame:
+def prepare_monthly_series(conn: sqlite3.Connection, start_date: str, end_date: str) -> pd.DataFrame:
     df = pd.read_sql(
-        "SELECT invoice_date, revenue FROM transactions",
+        "SELECT invoice_date, revenue FROM transactions WHERE invoice_date >= ? AND invoice_date <= ?",
         conn,
+        params=(start_date, end_date + ' 23:59:59'),
         parse_dates=['invoice_date'],
     )
     monthly = (
@@ -41,8 +42,13 @@ def forecast_revenue(series: pd.DataFrame, periods: int = 3) -> pd.DataFrame:
     return forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']]
 
 
-def load_forecast(conn: sqlite3.Connection, periods: int = 3) -> tuple[pd.DataFrame, pd.DataFrame]:
+def load_forecast(
+    conn: sqlite3.Connection,
+    start_date: str,
+    end_date: str,
+    periods: int = 3,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Returns (monthly_actuals, forecast_df)."""
-    series = prepare_monthly_series(conn)
+    series = prepare_monthly_series(conn, start_date, end_date)
     forecast = forecast_revenue(series, periods=periods)
     return series, forecast

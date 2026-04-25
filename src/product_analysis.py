@@ -23,7 +23,11 @@ def get_declining_products(monthly_df: pd.DataFrame, months: int = 3) -> pd.Data
     return pd.DataFrame(declining)
 
 
-def load_product_analysis(conn: sqlite3.Connection) -> tuple[pd.DataFrame, pd.DataFrame]:
+def load_product_analysis(
+    conn: sqlite3.Connection,
+    start_date: str,
+    end_date: str,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Returns (top_products_df, declining_products_df)."""
     df = pd.read_sql(
         """
@@ -31,9 +35,11 @@ def load_product_analysis(conn: sqlite3.Connection) -> tuple[pd.DataFrame, pd.Da
                strftime('%Y-%m', invoice_date) AS month,
                SUM(revenue) AS revenue
         FROM transactions
+        WHERE invoice_date >= ? AND invoice_date <= ?
         GROUP BY stock_code, description, month
         """,
         conn,
+        params=(start_date, end_date + ' 23:59:59'),
     )
 
     total = (
