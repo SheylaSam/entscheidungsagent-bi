@@ -68,8 +68,30 @@ def load_all(start_date: str, end_date: str, countries: tuple, declining_months:
     return rfm, actuals, forecast, top_products, declining
 
 
+@st.cache_data
+def load_monthly_product(start_date: str, end_date: str, countries: tuple):
+    conn = get_connection()
+    df = pd.read_sql(
+        f"""SELECT description, strftime('%Y-%m-01', invoice_date) as month,
+                   SUM(revenue) as revenue
+            FROM transactions
+            WHERE invoice_date >= ? AND invoice_date <= ?
+            AND country IN ({','.join(['?']*len(countries))})
+            GROUP BY description, month
+            ORDER BY month""",
+        conn,
+        params=(start_date, end_date + ' 23:59:59') + countries,
+    )
+    conn.close()
+    df['month'] = pd.to_datetime(df['month'])
+    return df
+
+
 rfm, actuals, forecast, top_products, declining = load_all(
     start_date.isoformat(), end_date.isoformat(), countries_tuple, 3
+)
+monthly_product_df = load_monthly_product(
+    start_date.isoformat(), end_date.isoformat(), countries_tuple
 )
 recs = generate_recommendations(forecast, rfm, declining)
 
@@ -193,7 +215,8 @@ with tab4:
             labels={'revenue': 'Umsatz (£)', 'description': ''},
             color='revenue', color_continuous_scale='Blues')
         fig.update_layout(height=380, coloraxis_showscale=False, yaxis={'categoryorder': 'total ascending'})
-        st.plotly_chart(fig, use_container_width=True)
+        selection = st.plotly_chart(fig, use_container_width=True,
+                                    on_select="rerun", key="top_products_chart")
 
     with col_decline:
         st.subheader(f"Rückläufige Produkte ({len(declining)})")
@@ -205,6 +228,31 @@ with tab4:
             d['revenue_last_month'] = d['revenue_last_month'].map('£{:,.0f}'.format)
             d.columns = ['Stock Code', 'Bezeichnung', 'Umsatz (letzter Monat)']
             st.dataframe(d, use_container_width=True, hide_index=True)
+
+    # Drill-down: show monthly trend for selected product
+    selected_product = None
+    if selection and selection.get("selection") and selection["selection"].get("points"):
+        points = selection["selection"]["points"]
+        if points:
+            selected_product = points[0].get("y")  # y-axis has description in horizontal bar
+
+    if selected_product:
+        st.divider()
+        st.subheader(f"Monatlicher Umsatz: {selected_product}")
+        product_monthly = monthly_product_df[monthly_product_df['description'] == selected_product]
+        if not product_monthly.empty:
+            fig_trend = px.line(
+                product_monthly, x='month', y='revenue',
+                labels={'month': 'Monat', 'revenue': 'Umsatz (£)'},
+                markers=True,
+            )
+            fig_trend.update_traces(line_color='#60a5fa', marker_color='#3b82f6')
+            fig_trend.update_layout(height=300)
+            st.plotly_chart(fig_trend, use_container_width=True)
+        else:
+            st.info("Keine Monatsdaten für dieses Produkt.")
+    else:
+        st.caption("Klicke auf ein Produkt im Balkendiagramm, um den monatlichen Umsatzverlauf zu sehen.")
 
 # ── Tab 5 ────────────────────────────────────────────────────────────────────
 with tab5:
