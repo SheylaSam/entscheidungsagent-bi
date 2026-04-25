@@ -231,10 +231,12 @@ with tab4:
 
     # Drill-down: show monthly trend for selected product
     selected_product = None
-    if selection and selection.get("selection") and selection["selection"].get("points"):
+    try:
         points = selection["selection"]["points"]
         if points:
-            selected_product = points[0].get("y")  # y-axis has description in horizontal bar
+            selected_product = points[0]["y"]
+    except (KeyError, TypeError, IndexError):
+        pass
 
     if selected_product:
         st.divider()
