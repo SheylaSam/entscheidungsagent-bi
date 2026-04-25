@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BI Entscheidungsagent — Online Retail II</title>
+<style>
+  @page { margin: 2.5cm 2.5cm 2.5cm 2.5cm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Georgia', 'Times New Roman', serif;
+    font-size: 11pt;
+    line-height: 1.6;
+    color: #1a1a1a;
+    background: #fff;
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 40px 0;
+  }
+
+  /* TITLE PAGE */
+  .title-page {
+    min-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    border-bottom: 2px solid #1e293b;
+    padding-bottom: 60px;
+    margin-bottom: 60px;
+    page-break-after: always;
+  }
+  .title-page .kurs-label {
+    font-family: 'Arial', sans-serif;
+    font-size: 10pt;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 32px;
+  }
+  .title-page h1 {
+    font-size: 28pt;
+    font-weight: bold;
+    color: #0f172a;
+    line-height: 1.2;
+    margin-bottom: 16px;
+  }
+  .title-page .subtitle {
+    font-size: 14pt;
+    color: #475569;
+    margin-bottom: 48px;
+    font-style: italic;
+  }
+  .title-meta {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 8px 16px;
+    font-family: 'Arial', sans-serif;
+    font-size: 10.5pt;
+  }
+  .title-meta .label { color: #64748b; font-weight: 600; }
+  .title-meta .value { color: #1a1a1a; }
+
+  /* HEADINGS */
+  h1, h2, h3, h4 {
+    font-family: 'Arial', 'Helvetica', sans-serif;
+    color: #0f172a;
+    page-break-after: avoid;
+  }
+  h1 { font-size: 18pt; margin: 40px 0 16px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; }
+  h2 { font-size: 14pt; margin: 32px 0 12px; color: #1e293b; }
+  h3 { font-size: 11.5pt; margin: 24px 0 8px; color: #334155; }
+
+  /* CHAPTER NUMBERS */
+  .chapter { counter-increment: chapter; }
+  .chapter > h1::before { content: counter(chapter) ". "; color: #7c3aed; }
+  body { counter-reset: chapter; }
+
+  /* PARAGRAPHS & LISTS */
+  p { margin: 0 0 12px; text-align: justify; }
+  ul, ol { margin: 8px 0 12px 24px; }
+  li { margin-bottom: 4px; }
+
+  /* CODE */
+  code {
+    font-family: 'Menlo', 'Courier New', monospace;
+    font-size: 9.5pt;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 3px;
+    padding: 1px 5px;
+  }
+  pre {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #7c3aed;
+    border-radius: 4px;
+    padding: 14px 16px;
+    margin: 12px 0 16px;
+    overflow-x: auto;
+    page-break-inside: avoid;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 9pt;
+    line-height: 1.5;
+  }
+
+  /* TABLES */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0 20px;
+    font-family: 'Arial', sans-serif;
+    font-size: 10pt;
+    page-break-inside: avoid;
+  }
+  th {
+    background: #1e293b;
+    color: #f8fafc;
+    padding: 9px 12px;
+    text-align: left;
+    font-weight: 600;
+  }
+  td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: top;
+  }
+  tr:nth-child(even) td { background: #f8fafc; }
+
+  /* CALLOUT BOXES */
+  .box {
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin: 16px 0;
+    page-break-inside: avoid;
+  }
+  .box-info { background: #eff6ff; border-left: 4px solid #3b82f6; }
+  .box-decision { background: #f5f3ff; border-left: 4px solid #7c3aed; }
+  .box-rule { background: #f0fdf4; border-left: 4px solid #22c55e; }
+  .box-warn { background: #fffbeb; border-left: 4px solid #f59e0b; }
+  .box-title {
+    font-family: 'Arial', sans-serif;
+    font-size: 9pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    color: #475569;
+  }
+
+  /* ARCHITECTURE DIAGRAM */
+  .arch {
+    font-family: 'Menlo', 'Courier New', monospace;
+    font-size: 9pt;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 20px 24px;
+    line-height: 1.8;
+    margin: 12px 0 16px;
+  }
+
+  /* FIGURE CAPTION */
+  .caption {
+    font-family: 'Arial', sans-serif;
+    font-size: 9pt;
+    color: #64748b;
+    text-align: center;
+    margin-top: -10px;
+    margin-bottom: 16px;
+    font-style: italic;
+  }
+
+  /* PRIORITY BADGES */
+  .prio-hoch { display: inline-block; background: #fee2e2; color: #991b1b; border-radius: 4px; padding: 2px 8px; font-family: 'Arial', sans-serif; font-size: 9pt; font-weight: 700; }
+  .prio-mittel { display: inline-block; background: #fef9c3; color: #854d0e; border-radius: 4px; padding: 2px 8px; font-family: 'Arial', sans-serif; font-size: 9pt; font-weight: 700; }
+  .prio-tief { display: inline-block; background: #dcfce7; color: #166534; border-radius: 4px; padding: 2px 8px; font-family: 'Arial', sans-serif; font-size: 9pt; font-weight: 700; }
+
+  /* PAGE BREAKS */
+  .page-break { page-break-after: always; height: 0; }
+
+  /* TOC */
+  .toc { margin: 0 0 20px; }
+  .toc-entry { display: flex; gap: 8px; margin-bottom: 4px; font-family: 'Arial', sans-serif; font-size: 10.5pt; }
+  .toc-num { color: #7c3aed; font-weight: 600; min-width: 24px; }
+  .toc-title { flex: 1; }
+  .toc-dots { flex: 1; border-bottom: 1px dotted #cbd5e1; margin: 0 4px; position: relative; top: -4px; }
+
+  /* FOOTER NOTE */
+  .footnote {
+    font-family: 'Arial', sans-serif;
+    font-size: 9pt;
+    color: #64748b;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 10px;
+    margin-top: 32px;
+  }
+</style>
+</head>
+<body>
+
+<!-- TITLE PAGE -->
+<div class="title-page">
+  <div class="kurs-label">Business Intelligence — Projektdokumentation</div>
+  <h1 style="border:none; margin-top:0; font-size:30pt;">BI Entscheidungsagent<br>Online Retail II</h1>
+  <div class="subtitle">Interaktives Dashboard mit regelbasiertem KI-Entscheidungsagenten<br>für einen UK-basierten Online-Händler</div>
+  <div class="title-meta">
+    <span class="label">Student</span>       <span class="value">Sheyla Sampietro</span>
+    <span class="label">Kurs</span>           <span class="value">Business Intelligence</span>
+    <span class="label">Dozent</span>         <span class="value">Manuel Renold</span>
+    <span class="label">Abgabedatum</span>    <span class="value">April 2026</span>
+    <span class="label">GitHub</span>         <span class="value">github.com/SheylaSam/entscheidungsagent-bi</span>
+    <span class="label">Dataset</span>        <span class="value">Online Retail II (UCI ML Repository)</span>
+  </div>
+</div>
+
+<!-- TABLE OF CONTENTS -->
+<div class="chapter">
+<h1>Inhaltsverzeichnis</h1>
+<div class="toc">
+  <div class="toc-entry"><span class="toc-num">1</span><span class="toc-title">Projektübersicht und Zielsetzung</span></div>
+  <div class="toc-entry"><span class="toc-num">2</span><span class="toc-title">Dataset — Online Retail II</span></div>
+  <div class="toc-entry"><span class="toc-num">3</span><span class="toc-title">Technologie-Entscheide</span></div>
+  <div class="toc-entry"><span class="toc-num">4</span><span class="toc-title">Systemarchitektur</span></div>
+  <div class="toc-entry"><span class="toc-num">5</span><span class="toc-title">Datenverarbeitung und Bereinigung</span></div>
+  <div class="toc-entry"><span class="toc-num">6</span><span class="toc-title">Analyse-Module</span></div>
+  <div class="toc-entry"><span class="toc-num">7</span><span class="toc-title">KI-Entscheidungsagent</span></div>
+  <div class="toc-entry"><span class="toc-num">8</span><span class="toc-title">Streamlit Dashboard</span></div>
+  <div class="toc-entry"><span class="toc-num">9</span><span class="toc-title">Testing und Qualitätssicherung</span></div>
+  <div class="toc-entry"><span class="toc-num">10</span><span class="toc-title">Fazit und Ausblick</span></div>
+</div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- 1. PROJEKTÜBERSICHT -->
+<div class="chapter">
+<h1>Projektübersicht und Zielsetzung</h1>
+
+<p>Dieses Projekt implementiert ein vollständiges Business-Intelligence-System für einen UK-basierten Online-Händler (Geschenkartikel). Das System besteht aus drei Kernkomponenten: einer Datenpipeline, die Rohdaten aus Excel in eine relationale Datenbank überführt; einer Analyse-Schicht, die Umsatzprognosen, Kundensegmentierung und Produktperformance berechnet; sowie einem regelbasierten KI-Entscheidungsagenten, der aus diesen Analysen konkrete Managemententscheide ableitet.</p>
+
+<p>Das Projektziel lässt sich in einem Satz zusammenfassen: <em>Aus 1,07 Millionen Transaktionen automatisch priorisierte Handlungsempfehlungen für das Management generieren.</em></p>
+
+<h2>Anforderungen</h2>
+
+<table>
+  <tr><th>Anforderung</th><th>Umsetzung</th></tr>
+  <tr><td>Datenbankanbindung</td><td>SQLite-Datenbank, automatisch aus Excel befüllt beim ersten Start</td></tr>
+  <tr><td>Interaktives Dashboard</td><td>Streamlit-App mit 5 Tabs, Plotly-Diagramme</td></tr>
+  <tr><td>KI-Entscheidungsagent</td><td>Regelbasierter Agent kombiniert Forecast + RFM + Produktdaten</td></tr>
+  <tr><td>Dokumentation</td><td>Dieser Bericht + README mit Tech-Entscheiden + GitHub Repo</td></tr>
+  <tr><td>Reproduzierbarkeit</td><td><code>pip install -r requirements.txt &amp;&amp; streamlit run app.py</code> genügt</td></tr>
+</table>
+</div>
+
+<!-- 2. DATASET -->
+<div class="chapter">
+<h1>Dataset — Online Retail II</h1>
+
+<p>Das verwendete Dataset stammt vom UCI Machine Learning Repository und beschreibt alle Transaktionen eines UK-basierten Online-Händlers für Geschenkartikel im Zeitraum Dezember 2009 bis Dezember 2011.</p>
+
+<table>
+  <tr><th>Eigenschaft</th><th>Wert</th></tr>
+  <tr><td>Quelle</td><td>UCI ML Repository — Online Retail II</td></tr>
+  <tr><td>Zeitraum</td><td>01.12.2009 – 09.12.2011</td></tr>
+  <tr><td>Gesamtzeilen (roh)</td><td>~1'067'000 Transaktionszeilen</td></tr>
+  <tr><td>Sheets</td><td>Year 2009–2010 (~525k), Year 2010–2011 (~542k)</td></tr>
+  <tr><td>Spalten</td><td>8 (Invoice, StockCode, Description, Quantity, InvoiceDate, Price, Customer ID, Country)</td></tr>
+  <tr><td>Primäres Segment</td><td>B2B-Grosshändler und -Händler (UK)</td></tr>
+</table>
+
+<h2>Datenqualität und Bereinigung</h2>
+
+<p>Das Rohdataset enthält verschiedene Anomalien, die vor der Analyse entfernt werden müssen:</p>
+
+<ul>
+  <li><strong>Stornierungen:</strong> Invoice-Nummern beginnend mit «C» (negative Quantities) — werden vollständig entfernt</li>
+  <li><strong>Fehlende Customer IDs:</strong> ~25% der Zeilen enthalten keine Kundennummer — für RFM nicht verwendbar, werden gefiltert</li>
+  <li><strong>Negative/Null-Preise:</strong> Testbestellungen und interne Buchungen mit Price ≤ 0 — werden entfernt</li>
+  <li><strong>Testcodes:</strong> StockCodes wie «POSTAGE», «BANK CHARGES», «M» — nicht-produktbezogene Einträge</li>
+</ul>
+
+<p>Nach der Bereinigung bleiben ca. 750'000–800'000 verwertbare Transaktionszeilen für die Analyse.</p>
+
+<div class="box box-info">
+  <div class="box-title">Feature Engineering</div>
+  Nach der Bereinigung wird eine <code>revenue</code>-Spalte berechnet: <code>revenue = quantity × price</code>. Diese Spalte ist die Grundlage für alle monetären Analysen (KPIs, RFM Monetary, Produktumsatz, Forecast).
+</div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- 3. TECHNOLOGIE-ENTSCHEIDE -->
+<div class="chapter">
+<h1>Technologie-Entscheide</h1>
+
+<p>Für dieses Projekt wurden zwei bewusste Abweichungen vom Kurs-Standard vorgenommen, die hier dokumentiert und begründet werden.</p>
+
+<h2>Python + Streamlit statt R + Shiny</h2>
+
+<div class="box box-decision">
+  <div class="box-title">Entscheid</div>
+  Der Kurs hat primär R und Shiny für interaktive Dashboards eingeführt. Für dieses Projekt wurde bewusst Python + Streamlit gewählt.
+</div>
+
+<table>
+  <tr><th>Kriterium</th><th>Python + Streamlit</th><th>R + Shiny</th></tr>
+  <tr><td>KI-Integration</td><td>✅ Prophet, scikit-learn, pandas sind Python-nativ</td><td>⚠ Nur via <code>reticulate</code> — fehleranfällig</td></tr>
+  <tr><td>Pipeline-Konsistenz</td><td>✅ Eine Sprache für alles (ETL, ML, Dashboard)</td><td>❌ Hybrid nötig: R für UI, Python für ML</td></tr>
+  <tr><td>Kurskonsistenz</td><td>✅ Week 08: Python (<code>SimpleAutoencoder.py</code>, Prophet-Guide)</td><td>✅ Primärsprache des Kurses</td></tr>
+  <tr><td>Lernkurve</td><td>✅ Geringerer Boilerplate, intuitive Reaktivität</td><td>⚠ Reactive-Programmiermodell komplex</td></tr>
+  <tr><td>Portfolio-Relevanz</td><td>✅ Industrie-Standard für Data Science Dashboards</td><td>⚠ Hauptsächlich akademisch/statistisch</td></tr>
+</table>
+
+<p>R + Shiny wäre die richtige Wahl gewesen, wenn die KI-Komponente entfallen würde und das Projekt rein deskriptiv-statistischer Natur wäre. Da die Prophet-Zeitreihe und die RFM-Berechnung den Kern des Projekts bilden, ist Python die einheitlichere Wahl.</p>
+
+<h2>SQLite statt MySQL</h2>
+
+<div class="box box-decision">
+  <div class="box-title">Entscheid</div>
+  Der Kurs verwendete MySQL (inkl. <code>MysqlConnector.py</code>). Für dieses Projekt wurde SQLite gewählt.
+</div>
+
+<table>
+  <tr><th>Kriterium</th><th>SQLite</th><th>MySQL</th></tr>
+  <tr><td>Portabilität</td><td>✅ Eine einzige <code>.db</code>-Datei, kein Server nötig</td><td>❌ Server-Installation + Konfiguration</td></tr>
+  <tr><td>Reproduzierbarkeit</td><td>✅ Automatisch beim ersten Start generiert</td><td>❌ Manueller Import, Credentials nötig</td></tr>
+  <tr><td>Scope-Angemessenheit</td><td>✅ Read-only BI-Dashboard, kein Concurrent Write</td><td>⚠ Mehrwert ohne Concurrent Access nicht vorhanden</td></tr>
+  <tr><td>SQL-Kompatibilität</td><td>✅ Standard SQL, identisches Abfragemodell</td><td>✅ Vollständiges RDBMS</td></tr>
+</table>
+
+<p>Das Prinzip (SQL-Queries, relationales Modell, Datenbankabstraktionsschicht) ist in beiden Systemen identisch — nur die Engine ist bei SQLite leichtgewichtiger. Für ein lokales BI-Dashboard ohne gleichzeitige Schreibzugriffe mehrerer Nutzer ist SQLite die angemessene Wahl.</p>
+
+<h2>Verwendeter Tech Stack</h2>
+
+<table>
+  <tr><th>Schicht</th><th>Technologie</th><th>Zweck</th></tr>
+  <tr><td>Rohdaten</td><td>Excel (<code>online_retail_II.xlsx</code>)</td><td>Quelldaten (UCI ML Repository)</td></tr>
+  <tr><td>Datenbank</td><td>SQLite (<code>retail.db</code>)</td><td>Persistenz, SQL-Abfragen</td></tr>
+  <tr><td>Datenverarbeitung</td><td>Python + Pandas</td><td>ETL, Bereinigung, Feature Engineering</td></tr>
+  <tr><td>Visualisierung</td><td>Plotly</td><td>Interaktive Charts</td></tr>
+  <tr><td>Dashboard</td><td>Streamlit</td><td>Web-UI, 5-Tab-Struktur</td></tr>
+  <tr><td>Forecasting</td><td>Prophet (Meta)</td><td>Bayesianische Zeitreihenprognose</td></tr>
+  <tr><td>Testing</td><td>pytest</td><td>Automatisierte Unit-Tests</td></tr>
+  <tr><td>Versionierung</td><td>GitHub</td><td>Source Control, Portfolio</td></tr>
+</table>
+</div>
+
+<div class="page-break"></div>
+
+<!-- 4. ARCHITEKTUR -->
+<div class="chapter">
+<h1>Systemarchitektur</h1>
+
+<div class="arch">
+Excel (online_retail_II.xlsx)
+    │
+    │  einmaliger Import beim ersten Start
+    ▼
+SQLite Datenbank (retail.db)
+    │  Tabelle: transactions
+    │  Spalten: invoice, stock_code, description,
+    │           quantity, invoice_date, price,
+    │           customer_id, country, revenue
+    │
+    ├──────────────────────────────────────────┐
+    │              SQL-Queries                 │
+    ▼                ▼                         ▼
+Prophet           RFM                    Produkt-
+Forecasting       Segmentierung          Analyse
+(forecasting.py)  (rfm_analysis.py)  (product_analysis.py)
+    │                │                         │
+    └────────────────┴─────────────────────────┘
+                     │
+                     ▼
+            KI-Entscheidungsagent
+              (decision_agent.py)
+                     │
+                     ▼
+          Streamlit Dashboard (app.py)
+          ┌──────────────────────────┐
+          │ Tab 1: Übersicht (KPIs)  │
+          │ Tab 2: Forecast          │
+          │ Tab 3: Kunden RFM        │
+          │ Tab 4: Produkte          │
+          │ Tab 5: KI-Entscheid      │
+          └──────────────────────────┘
+</div>
+<div class="caption">Abbildung 1: Systemarchitektur des BI Entscheidungsagenten</div>
+
+<h2>Modulstruktur</h2>
+
+<table>
+  <tr><th>Datei</th><th>Verantwortlichkeit</th></tr>
+  <tr><td><code>src/data_processing.py</code></td><td>Excel-Import, Bereinigung, SQLite-Befüllung. Wird einmalig ausgeführt, wenn <code>retail.db</code> noch nicht existiert.</td></tr>
+  <tr><td><code>src/rfm_analysis.py</code></td><td>RFM-Berechnung pro Kunde (Recency / Frequency / Monetary), Quintil-Scoring, Segment-Zuweisung.</td></tr>
+  <tr><td><code>src/forecasting.py</code></td><td>Monatsaggregation, Prophet-Fit, 3-Monats-Prognose mit Konfidenzintervall.</td></tr>
+  <tr><td><code>src/product_analysis.py</code></td><td>Top-10-Produkte nach Umsatz, Erkennung von Produkten mit ≥3 aufeinanderfolgenden Monatsrückgängen.</td></tr>
+  <tr><td><code>src/decision_agent.py</code></td><td>Regelbasierter Agent: kombiniert alle drei Analysen und erzeugt priorisierte Empfehlungen.</td></tr>
+  <tr><td><code>app.py</code></td><td>Streamlit-Hauptapplikation mit 5 Tabs und <code>@st.cache_data</code>-Caching aller Datenladeoperationen.</td></tr>
+</table>
+
+<h2>Datenbankschema</h2>
+
+<p>Die Datenbank enthält eine einzige Tabelle <code>transactions</code>, die alle bereinigten Transaktionen speichert:</p>
+
+<pre><code>CREATE TABLE transactions (
+    invoice       TEXT,
+    stock_code    TEXT,
+    description   TEXT,
+    quantity      REAL,
+    invoice_date  TEXT,   -- ISO-Format: YYYY-MM-DD HH:MM:SS
+    price         REAL,
+    customer_id   TEXT,
+    country       TEXT,
+    revenue       REAL    -- Computed: quantity × price
+);</code></pre>
+
+<p>Das Single-Table-Design ist für dieses Projekt bewusst gewählt: Die Quelldaten sind denormalisiert (jede Zeile enthält alle Informationen), und für ein Read-only BI-Dashboard sind keine Schreiboperationen oder normalisierten Relationen nötig. Sämtliche Aggregationen werden durch SQL-Queries und Pandas direkt auf dieser Tabelle durchgeführt.</p>
+</div>
+
+<div class="page-break"></div>
+
+<!-- 5. DATENVERARBEITUNG -->
+<div class="chapter">
+<h1>Datenverarbeitung und Bereinigung</h1>
+
+<p>Das Modul <code>src/data_processing.py</code> implementiert die vollständige ETL-Pipeline (Extract, Transform, Load) vom Excel-Rohdatensatz zur SQLite-Datenbank.</p>
+
+<h2>ETL-Pipeline</h2>
+
+<h3>Extract</h3>
+<p>Beide Excel-Sheets («Year 2009-2010» und «Year 2010-2011») werden mittels <code>pandas.read_excel()</code> mit dem Parameter <code>sheet_name=None</code> eingelesen und zu einem DataFrame konkateniert. Da der Excel-Import bei 1 Million Zeilen mehrere Minuten dauern kann, wird die Datenbank nur beim ersten Start generiert — bei allen folgenden Starts wird die vorhandene <code>retail.db</code> direkt verwendet.</p>
+
+<h3>Transform — Bereinigungsschritte</h3>
+
+<pre><code>def clean_dataframe(df):
+    df = df.rename(columns=COLUMN_MAP)           # Spaltennamen normalisieren
+    df = df[df['quantity'] > 0]                  # Stornierungen entfernen
+    df = df[df['price'] > 0]                     # Null/Negativpreise entfernen
+    df = df.dropna(subset=['customer_id'])        # Zeilen ohne Kundennummer
+    df['revenue'] = df['quantity'] * df['price'] # Revenue berechnen
+    return df</code></pre>
+
+<h3>Load</h3>
+<p>Der bereinigte DataFrame wird über <code>pandas.DataFrame.to_sql()</code> in die SQLite-Datenbank geschrieben. Bei einem Re-Run wird die bestehende Tabelle ersetzt (<code>if_exists='replace'</code>).</p>
+
+<h2>Einstiegspunkt</h2>
+
+<p>Die Funktion <code>build_database()</code> wird beim Start der Streamlit-App automatisch aufgerufen:</p>
+
+<pre><code>def build_database(excel_path=EXCEL_PATH, db_path=DB_PATH):
+    if db_path.exists():
+        return   # DB bereits vorhanden — kein Re-Import
+    df = pd.concat([pd.read_excel(excel_path, sheet_name=s)
+                    for s in ['Year 2009-2010', 'Year 2010-2011']])
+    clean_df = clean_dataframe(df)
+    load_to_sqlite(clean_df, db_path)</code></pre>
+
+<div class="box box-info">
+  <div class="box-title">Performance-Hinweis</div>
+  Der erste Start dauert 2–5 Minuten (abhängig von Hardware), da ~1 Million Excel-Zeilen verarbeitet werden. Streamlit zeigt während des Imports einen Spinner. Alle nachfolgenden Starts laden direkt aus der SQLite-Datenbank und sind in Sekunden bereit.
+</div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- 6. ANALYSE-MODULE -->
+<div class="chapter">
+<h1>Analyse-Module</h1>
+
+<h2>6.1 Prophet-Zeitreihenprognose</h2>
+
+<p>Das Modul <code>src/forecasting.py</code> erstellt eine 3-Monats-Umsatzprognose mithilfe des Prophet-Bibliothek von Meta (ehemals Facebook). Prophet ist ein additives Zeitreihenmodell, das automatisch Trend, wöchentliche und jährliche Saisonalität erkennt und bei fehlenden Werten robust ist.</p>
+
+<h3>Datenvorbereitung</h3>
+<p>Die Transaktionsdaten werden auf Monatsebene aggregiert. Prophet erwartet zwei Spalten: <code>ds</code> (Datum) und <code>y</code> (Wert):</p>
+
+<pre><code>SELECT DATE(invoice_date, 'start of month') as month,
+       SUM(revenue) as revenue
+FROM transactions
+GROUP BY month
+ORDER BY month</code></pre>
+
+<h3>Modellierung und Prognose</h3>
+
+<pre><code>from prophet import Prophet
+
+model = Prophet(yearly_seasonality=True, weekly_seasonality=False)
+model.fit(series)   # series: DataFrame mit ds/y-Spalten
+future = model.make_future_dataframe(periods=3, freq='MS')
+forecast = model.predict(future)</code></pre>
+
+<p>Das Modell gibt für jeden Monat drei Werte zurück: <code>yhat</code> (Punktprognose), <code>yhat_lower</code> und <code>yhat_upper</code> (80%-Konfidenzintervall). Im Dashboard werden historische Werte als Linie und die Prognosewerte als schraffiertes Band dargestellt.</p>
+
+<h2>6.2 RFM-Kundensegmentierung</h2>
+
+<p>Das Modul <code>src/rfm_analysis.py</code> segmentiert alle Kunden nach dem RFM-Modell (Recency, Frequency, Monetary). RFM ist ein etabliertes Verfahren im CRM und BI, um Kunden anhand ihres Kaufverhaltens zu klassifizieren.</p>
+
+<h3>RFM-Metriken</h3>
+
+<table>
+  <tr><th>Metrik</th><th>Definition</th><th>Bedeutung</th></tr>
+  <tr><td><strong>Recency (R)</strong></td><td>Tage seit dem letzten Kauf</td><td>Niedriger Wert = aktiver Kunde</td></tr>
+  <tr><td><strong>Frequency (F)</strong></td><td>Anzahl Bestellungen</td><td>Hoher Wert = treuer Kunde</td></tr>
+  <tr><td><strong>Monetary (M)</strong></td><td>Gesamtumsatz pro Kunde</td><td>Hoher Wert = wertvoller Kunde</td></tr>
+</table>
+
+<h3>Quintil-Scoring</h3>
+<p>Jede Metrik wird in 5 Quintile eingeteilt (Score 1–5). Für Recency gilt: Score 5 = kürzlicher Kauf (niedrige Tage), Score 1 = lange nicht gekauft. Für Frequency und Monetary: Score 5 = höchster Wert.</p>
+
+<h3>Segmente</h3>
+
+<table>
+  <tr><th>Segment</th><th>RFM-Regel</th><th>Bedeutung</th></tr>
+  <tr><td>Champions</td><td>R=5, F≥4</td><td>Beste Kunden: kürzlich, häufig, hoher Umsatz</td></tr>
+  <tr><td>Loyal</td><td>F≥3, R≥3</td><td>Regelmässige Käufer mit guter Recency</td></tr>
+  <tr><td>At Risk</td><td>R≤2, F≥3</td><td>Früher aktiv, jetzt abgewandert — Reaktivierung nötig</td></tr>
+  <tr><td>Lost</td><td>R=1, F≤2</td><td>Inaktiv, kaum Kaufhistorie — schwer zurückzugewinnen</td></tr>
+  <tr><td>New</td><td>R≥4, F=1</td><td>Neue Kunden — Bindung aufbauen</td></tr>
+  <tr><td>Others</td><td>Kein Match</td><td>Mittelsegment ohne klares Profil</td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<h2>6.3 Produkt-Performance</h2>
+
+<p>Das Modul <code>src/product_analysis.py</code> liefert zwei Analysen:</p>
+
+<h3>Top-10-Produkte</h3>
+<p>Aggregation des Gesamtumsatzes je Produkt (StockCode + Description), Auswahl der 10 grössten Positionen. Dargestellt als horizontales Balkendiagramm im Dashboard.</p>
+
+<h3>Rückläufige Produkte</h3>
+<p>Für jeden Monat wird der Monatsumsatz je Produkt berechnet. Anschliessend wird geprüft, ob der Umsatz über ≥3 aufeinanderfolgende Monate konsistent gesunken ist. Diese Produkte gelten als «rückläufig» und werden dem Entscheidungsagenten übergeben.</p>
+
+<pre><code>def get_declining_products(monthly_df, months=3):
+    # Für jedes Produkt: prüfe ob die letzten `months` Monate
+    # jeweils niedriger als der Vormonat waren
+    declining = []
+    for product, grp in monthly_df.groupby('description'):
+        last_n = grp.sort_values('month').tail(months + 1)['revenue'].values
+        if all(last_n[i] > last_n[i+1] for i in range(len(last_n)-1)):
+            declining.append(product)
+    return declining</code></pre>
+</div>
+
+<!-- 7. KI-ENTSCHEIDUNGSAGENT -->
+<div class="chapter">
+<h1>KI-Entscheidungsagent</h1>
+
+<p>Das Herzstück des Projekts ist der regelbasierte Entscheidungsagent in <code>src/decision_agent.py</code>. Er kombiniert die Ergebnisse aller drei Analyse-Module (Forecast, RFM, Produktanalyse) und leitet daraus priorisierte Managemententscheide ab.</p>
+
+<h2>Design-Entscheid: Regelbasiert statt LLM</h2>
+
+<p>Für BI-Dashboards in der Praxis ist ein regelbasierter Agent einer LLM-Integration in mehreren Punkten überlegen:</p>
+
+<ul>
+  <li><strong>Transparenz:</strong> Jede Empfehlung ist direkt auf konkrete Metriken und Schwellwerte zurückführbar — kein «Black-Box»-Verhalten</li>
+  <li><strong>Determinismus:</strong> Gleiche Datenlage ergibt immer die gleiche Empfehlung — reproduzierbar und auditierbar</li>
+  <li><strong>Keine Latenz/Kosten:</strong> Kein API-Call nötig, Empfehlungen werden in Millisekunden generiert</li>
+  <li><strong>Kurskonformität:</strong> Der Fokus liegt auf der BI-Methodik, nicht auf dem Prompt-Engineering</li>
+</ul>
+
+<h2>Entscheidungsregeln</h2>
+
+<div class="box box-rule">
+  <div class="box-title">Regel 1 — Reaktivierungskampagne <span class="prio-hoch">HOCH</span></div>
+  <p><strong>Bedingung:</strong> Forecast nächster Monat &lt; letzter Istwert um &gt;5% <strong>UND</strong> At-Risk-Kunden-Anteil &gt;20%</p>
+  <p><strong>Entscheid:</strong> Sofortige Reaktivierungskampagne für At-Risk-Segment lancieren</p>
+  <p><strong>Logik:</strong> Rückläufiger Umsatz kombiniert mit einer grossen Gruppe abgewanderter Kunden signalisiert ein akutes Churn-Problem, das durch gezielte Retention-Massnahmen (z.B. Rabattcodes, persönliche E-Mails) adressiert werden kann.</p>
+</div>
+
+<div class="box box-rule">
+  <div class="box-title">Regel 2 — Sortimentsbereinigung <span class="prio-mittel">MITTEL</span></div>
+  <p><strong>Bedingung:</strong> Mindestens 1 Produkt mit ≥3 aufeinanderfolgenden Monatsrückgängen</p>
+  <p><strong>Entscheid:</strong> Rückläufige Produkte aus dem Sortiment nehmen oder repositionieren</p>
+  <p><strong>Logik:</strong> Ein anhaltender Umsatzrückgang über 3+ Monate ist kein saisonales Muster, sondern ein strukturelles Problem (sinkende Nachfrage, Qualitätsprobleme, Wettbewerb).</p>
+</div>
+
+<div class="box box-rule">
+  <div class="box-title">Regel 3 — Kein Handlungsbedarf <span class="prio-tief">TIEF</span></div>
+  <p><strong>Bedingung:</strong> Keine der obigen Regeln greift</p>
+  <p><strong>Entscheid:</strong> Aktuelle Strategie beibehalten</p>
+  <p><strong>Logik:</strong> Positive oder stabile Forecasts ohne Kundenabwanderung und ohne rückläufige Produkte indizieren, dass kein kurzfristiger Handlungsbedarf besteht.</p>
+</div>
+
+<h2>Empfehlungsformat</h2>
+
+<p>Jede Empfehlung wird als strukturiertes Dictionary zurückgegeben:</p>
+
+<pre><code>{
+    "priority":   "HOCH",           # HOCH / MITTEL / TIEF
+    "finding":    "Forecast –8% ...",   # Was die Daten zeigen
+    "decision":   "Reaktivierungskampagne ...",  # Konkrete Massnahme
+    "reasoning":  "Forecast: –8%, At-Risk: 23% ..."  # Welche Metriken
+}</code></pre>
+
+<p>Mehrere Regeln können gleichzeitig zutreffen. In diesem Fall werden alle aktiven Empfehlungen zurückgegeben, nach Priorität absteigend sortiert.</p>
+</div>
+
+<div class="page-break"></div>
+
+<!-- 8. DASHBOARD -->
+<div class="chapter">
+<h1>Streamlit Dashboard</h1>
+
+<p>Das Frontend ist als Streamlit-Applikation mit 5 Tabs implementiert. Alle Dateladeoperationen sind mit <code>@st.cache_data</code> dekoriert, sodass die SQLite-Queries und Prophet-Berechnungen nur einmal pro Session ausgeführt werden.</p>
+
+<h2>Tab-Struktur</h2>
+
+<table>
+  <tr><th>Tab</th><th>Inhalt</th><th>Zielgruppe</th></tr>
+  <tr>
+    <td><strong>1 — Übersicht</strong></td>
+    <td>4 KPI-Kacheln (Umsatz, Kunden, Bestellungen, Forecast-Delta), Mini-Trendchart, Kundensegment-Balken, kompakte KI-Alert-Box</td>
+    <td>Management, Executive View</td>
+  </tr>
+  <tr>
+    <td><strong>2 — Forecast</strong></td>
+    <td>Historischer Monatsumsatz als Linie, Prophet-Prognose mit Konfidenzband, 3 Forecast-Metriken als Kacheln</td>
+    <td>Vertrieb, Controlling</td>
+  </tr>
+  <tr>
+    <td><strong>3 — Kunden RFM</strong></td>
+    <td>Scatter Plot (Recency vs. Frequency, Grösse = Monetary), Segmentzusammenfassung als Tabelle, At-Risk-Kundenliste</td>
+    <td>Marketing, CRM</td>
+  </tr>
+  <tr>
+    <td><strong>4 — Produkte</strong></td>
+    <td>Top-10 horizontales Balkendiagramm, Tabelle rückläufiger Produkte</td>
+    <td>Category Management, Einkauf</td>
+  </tr>
+  <tr>
+    <td><strong>5 — KI-Entscheid</strong></td>
+    <td>Farbkodierte Empfehlungskarten (Rot=HOCH, Gelb=MITTEL, Grün=TIEF), vollständige Begründung, Entscheidungslogik-Tabelle</td>
+    <td>Management, Entscheidungsträger</td>
+  </tr>
+</table>
+
+<h2>Technische Implementierung</h2>
+
+<h3>Caching</h3>
+<pre><code>@st.cache_data
+def load_data():
+    conn = get_connection()
+    rfm     = load_rfm(conn)
+    actuals, forecast = load_forecast(conn)
+    top_prod, declining = load_product_analysis(conn)
+    recs    = generate_recommendations(forecast, rfm, declining)
+    return rfm, actuals, forecast, top_prod, declining, recs</code></pre>
+
+<h3>Prioritäts-Farbkodierung (Tab 5)</h3>
+<pre><code>PRIORITY_COLORS = {
+    'HOCH':   ('#fee2e2', '#991b1b'),   # Rot
+    'MITTEL': ('#fef9c3', '#854d0e'),   # Gelb
+    'TIEF':   ('#dcfce7', '#166534'),   # Grün
+}
+for rec in recommendations:
+    bg, fg = PRIORITY_COLORS[rec['priority']]
+    st.markdown(f"""
+    &lt;div style="background:{bg}; border-left: 4px solid {fg}; padding:16px;"&gt;
+        &lt;strong style="color:{fg}"&gt;{rec['priority']}: {rec['decision']}&lt;/strong&gt;
+        &lt;p&gt;{rec['reasoning']}&lt;/p&gt;
+    &lt;/div&gt;""", unsafe_allow_html=True)</code></pre>
+</div>
+
+<!-- 9. TESTING -->
+<div class="chapter">
+<h1>Testing und Qualitätssicherung</h1>
+
+<p>Das Projekt verwendet Test-Driven Development (TDD) mit pytest. Alle fünf Module haben dedizierte Testdateien. Insgesamt sind 22 Tests implementiert, die vollständig auf synthetischen In-Memory-Daten laufen — keine echte Datenbank oder Excel-Datei nötig.</p>
+
+<h2>Testübersicht</h2>
+
+<table>
+  <tr><th>Testdatei</th><th>Anzahl Tests</th><th>Abgedeckte Fälle</th></tr>
+  <tr><td><code>tests/test_data_processing.py</code></td><td>6</td><td>Bereinigung, Stornierungen, fehlende IDs, Revenue-Berechnung, DB-Schreiben/Lesen</td></tr>
+  <tr><td><code>tests/test_rfm_analysis.py</code></td><td>5</td><td>RFM-Berechnung, Segmentzuweisung (Champions, At Risk, Lost, New), Scoring</td></tr>
+  <tr><td><code>tests/test_forecasting.py</code></td><td>3</td><td>Monatsserie-Aggregation, Prophet-Forecast Ausgabestruktur, Prognosehorizont</td></tr>
+  <tr><td><code>tests/test_product_analysis.py</code></td><td>4</td><td>Top-N-Selektion, rückläufige Produkte (3-Monats-Regel), Grenzfälle</td></tr>
+  <tr><td><code>tests/test_decision_agent.py</code></td><td>4</td><td>Regel 1 (HOCH), Regel 2 (MITTEL), Regel 3 (TIEF), Mehrfachregeln</td></tr>
+  <tr><td><strong>Total</strong></td><td><strong>22</strong></td><td></td></tr>
+</table>
+
+<h2>Testausführung</h2>
+
+<pre><code>$ pytest tests/ -v
+======================== test session starts =========================
+tests/test_data_processing.py ......                           [  6/22]
+tests/test_rfm_analysis.py .....                               [11/22]
+tests/test_forecasting.py ...                                  [14/22]
+tests/test_product_analysis.py ....                            [18/22]
+tests/test_decision_agent.py ....                              [22/22]
+======================== 22 passed in 4.32s ==========================</code></pre>
+
+<div class="box box-info">
+  <div class="box-title">Design-Entscheid: In-Memory Tests</div>
+  Alle Tests verwenden synthetische DataFrames und SQLite-In-Memory-Datenbanken (<code>sqlite3.connect(':memory:')</code>). Dies macht die Tests unabhängig vom echten Dataset (das aus Grösse-Gründen nicht ins Repo eingecheckt wird) und ermöglicht schnelle, isolierte Ausführung.
+</div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- 10. FAZIT -->
+<div class="chapter">
+<h1>Fazit und Ausblick</h1>
+
+<h2>Ergebnis</h2>
+
+<p>Das Projekt hat alle Anforderungen vollständig umgesetzt: Die Datenpipeline überführt 1,07 Millionen Rohtransaktionen automatisch in eine SQLite-Datenbank; drei Analyse-Module (Prophet-Forecast, RFM-Segmentierung, Produktanalyse) liefern betriebswirtschaftlich relevante Erkenntnisse; der regelbasierte Entscheidungsagent fasst diese zu priorisierten Managemententscheiden zusammen; das 5-Tab-Streamlit-Dashboard visualisiert alle Resultate interaktiv.</p>
+
+<p>Das Projekt ist vollständig reproduzierbar: Nach dem Klonen des Repositorys und dem Download des Datasets genügt ein einziger Befehl (<code>streamlit run app.py</code>), um das Dashboard zu starten — ohne Server, ohne manuelle Datenbankkonfiguration, ohne weitere Setup-Schritte.</p>
+
+<h2>Erkenntnisse</h2>
+
+<ul>
+  <li><strong>Datenqualität ist entscheidend:</strong> ~25–30% der Rohtransaktionen werden in der Bereinigung entfernt (Stornierungen, fehlende Kundennummern, Testeinträge). Ohne diese Bereinigung würden alle Analysen verzerrte Resultate liefern.</li>
+  <li><strong>Prophet ist saisonal robust:</strong> Das Modell erkennt die Weihnachts-Saisonalität des Geschenkartikel-Shops automatisch und berücksichtigt sie in der Prognose.</li>
+  <li><strong>RFM ist simpel aber wirksam:</strong> Mit nur drei Metriken und einem Quintil-Scoring lassen sich Kunden sinnvoll für gezielte Massnahmen segmentieren.</li>
+  <li><strong>Regelbasierter Agent genügt für BI:</strong> Für strukturierte Management-Entscheide auf der Grundlage klarer Metriken ist ein LLM nicht nötig — Transparenz und Determinismus sind wichtiger als Flexibilität.</li>
+</ul>
+
+<h2>Mögliche Erweiterungen</h2>
+
+<ul>
+  <li><strong>Länder-Filter:</strong> Dashboard-Filter nach Country (UK, Germany, France etc.) für regionalen Vergleich</li>
+  <li><strong>Zeitraum-Slider:</strong> Interaktiver Datumsfilter für historische Vergleiche</li>
+  <li><strong>E-Mail-Alert:</strong> Automatischer Versand der KI-Empfehlung bei Überschreiten der Schwellwerte</li>
+  <li><strong>Erweiterter Agent:</strong> Zusätzliche Regeln (z.B. Länder-basierte Empfehlungen, saisonale Produktvorschläge)</li>
+  <li><strong>Cloud-Deployment:</strong> Deployment auf Streamlit Community Cloud für öffentlichen Zugang</li>
+</ul>
+
+<div class="box box-decision">
+  <div class="box-title">Repository</div>
+  Der vollständige Quellcode, die Testdateien, dieses Dokument und eine detaillierte Setup-Anleitung sind auf GitHub verfügbar:<br>
+  <strong>https://github.com/SheylaSam/entscheidungsagent-bi</strong>
+</div>
+
+<div class="footnote">
+  Sheyla Sampietro — Business Intelligence Projekt, HS 2026 — Dozent: Manuel Renold<br>
+  Dataset: Chen, D. (2015). Online Retail II. UCI Machine Learning Repository. https://doi.org/10.24432/C5CG6D
+</div>
+</div>
+
+</body>
+</html>
