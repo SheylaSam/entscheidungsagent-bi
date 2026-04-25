@@ -27,11 +27,23 @@ Ein interaktives BI-Dashboard mit integriertem KI-Entscheidungsagenten für eine
 
 | Schicht | Tool |
 |---|---|
+| Rohdaten | Excel (online_retail_II.xlsx) |
+| Datenbank | SQLite (siehe Entscheid unten) |
 | Datenverarbeitung | Python + Pandas |
 | Visualisierung | Plotly |
 | Dashboard | Streamlit |
 | Forecasting | Prophet (Facebook) |
 | Versionierung | GitHub |
+
+### Datenbankentscheid: SQLite statt MySQL
+
+Der Kurs verwendete MySQL (inkl. `MysqlConnector.py`). Für dieses Projekt wurde bewusst **SQLite** gewählt, weil:
+
+1. **Portabilität**: SQLite ist eine einzige `.db`-Datei, kein Datenbankserver nötig. Jeder kann das Repo clonen und direkt starten.
+2. **Reproduzierbarkeit**: MySQL erfordert Server-Installation und manuellen Import — SQLite wird automatisch beim ersten Start aus dem Excel befüllt.
+3. **Scope-Angemessenheit**: Für ein Read-only BI-Dashboard ohne Concurrent Writes ist SQLite die richtige Wahl. MySQL würde künstliche Komplexität einführen ohne Mehrwert.
+
+Das Prinzip (SQL-Queries, relationales Modell, DB-Abstraktionsschicht) ist identisch — nur die Engine ist leichtgewichtiger.
 
 ---
 
@@ -39,7 +51,9 @@ Ein interaktives BI-Dashboard mit integriertem KI-Entscheidungsagenten für eine
 
 ```
 Excel (online_retail_II.xlsx)
-    ↓
+    ↓ (einmaliger Import beim ersten Start)
+SQLite Datenbank (retail.db)
+    ↓ (SQL-Queries)
 Pandas (Bereinigung, Feature Engineering)
     ↓
 ┌─────────────────────────────────────────┐
@@ -118,18 +132,21 @@ Jede Empfehlung enthält:
 ```
 entscheidungsagent-bi/
 ├── data/
-│   └── online_retail_II.xlsx
+│   ├── online_retail_II.xlsx     # Rohdaten (via .gitignore ausgeschlossen, Download-Link in README)
+│   └── retail.db                 # SQLite DB (auto-generiert beim ersten Start)
 ├── src/
-│   ├── data_processing.py
-│   ├── forecasting.py
-│   ├── rfm_analysis.py
-│   ├── product_analysis.py
-│   └── decision_agent.py
-├── app.py
+│   ├── data_processing.py        # Excel → SQLite Import + Bereinigung
+│   ├── forecasting.py            # Prophet Zeitreihe
+│   ├── rfm_analysis.py           # RFM Segmentierung
+│   ├── product_analysis.py       # Produkt-Performance
+│   └── decision_agent.py         # Entscheidungsregeln & Empfehlungen
+├── app.py                        # Streamlit Hauptapp (5 Tabs)
 ├── requirements.txt
-├── README.md
+├── .gitignore
+├── README.md                     # Setup-Anleitung + Screenshots + Datenbankentscheid
 └── docs/
-    └── report.pdf
+    ├── superpowers/specs/        # Design-Dokumente
+    └── report.pdf                # ~10-seitiger Bericht
 ```
 
 ---
@@ -137,5 +154,5 @@ entscheidungsagent-bi/
 ## Abgrenzung (nicht im Scope)
 
 - Kein LLM/Chat-Interface (Ansatz 3 wurde bewusst weggelassen)
-- Keine Datenbankanbindung (Excel als Datenquelle reicht)
+- Kein MySQL-Server (SQLite reicht, siehe Datenbankentscheid)
 - Kein Cloud-Deployment (lokal lauffähig reicht für Abgabe)
