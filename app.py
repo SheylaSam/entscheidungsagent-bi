@@ -59,19 +59,19 @@ st.sidebar.divider()
 
 
 @st.cache_data
-def load_all(start_date: str, end_date: str, countries: tuple):
+def load_all(start_date: str, end_date: str, countries: tuple, declining_months: int = 3):
     conn = get_connection()
     rfm = load_rfm(conn, start_date, end_date, countries)
     actuals, forecast = load_forecast(conn, start_date, end_date, countries)
-    top_products, declining = load_product_analysis(conn, start_date, end_date, countries)
+    top_products, declining = load_product_analysis(conn, start_date, end_date, countries, declining_months)
     conn.close()
-    recs = generate_recommendations(forecast, rfm, declining)
-    return rfm, actuals, forecast, top_products, declining, recs
+    return rfm, actuals, forecast, top_products, declining
 
 
-rfm, actuals, forecast, top_products, declining, recs = load_all(
-    start_date.isoformat(), end_date.isoformat(), countries_tuple
+rfm, actuals, forecast, top_products, declining = load_all(
+    start_date.isoformat(), end_date.isoformat(), countries_tuple, 3
 )
+recs = generate_recommendations(forecast, rfm, declining)
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📊 Übersicht", "📈 Forecast", "👥 Kunden RFM", "📦 Produkte", "🤖 KI-Entscheid"
@@ -211,13 +211,38 @@ with tab5:
     st.title("KI-Entscheidungsagent")
     st.caption("Regelbasierter Agent — kombiniert Forecast, RFM und Produktanalyse")
 
+    st.subheader("Schwellwerte anpassen")
+    col_s1, col_s2 = st.columns(2)
+
+    with col_s1:
+        forecast_threshold = st.slider(
+            "Regel 1: Forecast-Rückgang (Schwellwert)",
+            min_value=-0.30, max_value=-0.01, value=-0.05, step=0.01,
+            format="%.2f",
+            help="Regel 1 wird ausgelöst wenn Forecast diesen Wert unterschreitet",
+        )
+        st.caption(f"Aktuell: Forecast < {forecast_threshold:.0%}")
+
+    with col_s2:
+        at_risk_threshold = st.slider(
+            "Regel 1: At-Risk-Anteil (Schwellwert)",
+            min_value=0.05, max_value=0.50, value=0.20, step=0.01,
+            format="%.2f",
+            help="Regel 1 wird ausgelöst wenn At-Risk-Anteil diesen Wert überschreitet",
+        )
+        st.caption(f"Aktuell: At-Risk > {at_risk_threshold:.0%}")
+
+    live_recs = generate_recommendations(forecast, rfm, declining, forecast_threshold, at_risk_threshold)
+
+    st.divider()
+
     priority_config = {
         'HOCH':   {'icon': '🔴', 'color': '#ef4444', 'bg': '#2d1515'},
         'MITTEL': {'icon': '🟡', 'color': '#f59e0b', 'bg': '#2d2410'},
         'TIEF':   {'icon': '🟢', 'color': '#4ade80', 'bg': '#152d1d'},
     }
 
-    for rec in recs:
+    for rec in live_recs:
         cfg = priority_config.get(rec['priority'], {'icon': '⚪', 'color': '#94a3b8', 'bg': '#1e293b'})
         st.markdown(f"""
         <div style="background:{cfg['bg']};border-left:4px solid {cfg['color']};padding:16px 20px;border-radius:8px;margin-bottom:16px;">
@@ -229,10 +254,10 @@ with tab5:
 
     st.divider()
     st.subheader("Entscheidungslogik")
-    st.markdown("""
+    st.markdown(f"""
 | Regel | Bedingung | Entscheid | Priorität |
 |---|---|---|---|
-| 1 | Forecast < –5% UND At-Risk > 20% | Reaktivierungskampagne | HOCH |
+| 1 | Forecast < {forecast_threshold:.0%} UND At-Risk > {at_risk_threshold:.0%} | Reaktivierungskampagne | HOCH |
 | 2 | ≥1 Produkt mit 3+ Monaten Rückgang | Sortiment bereinigen | MITTEL |
 | 3 | Keine der obigen Regeln | Kein Handlungsbedarf | TIEF |
 """)

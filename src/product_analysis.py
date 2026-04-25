@@ -28,6 +28,7 @@ def load_product_analysis(
     start_date: str,
     end_date: str,
     countries: tuple = (),
+    declining_months: int = 3,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Returns (top_products_df, declining_products_df)."""
     placeholders = ','.join(['?' for _ in countries])
@@ -52,5 +53,5 @@ def load_product_analysis(
 
     df['month_num'] = pd.to_datetime(df['month']).dt.to_period('M').apply(lambda x: x.ordinal)
     top = get_top_products(total)
-    declining = get_declining_products(df)
+    declining = get_declining_products(df, months=declining_months)
     return top, declining

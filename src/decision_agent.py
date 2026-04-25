@@ -1,7 +1,13 @@
 import pandas as pd
 
 
-def generate_recommendations(forecast_df, rfm_df, declining_df):
+def generate_recommendations(
+    forecast_df,
+    rfm_df,
+    declining_df,
+    forecast_threshold: float = -0.05,
+    at_risk_threshold: float = 0.20,
+):
     recommendations = []
     actuals = forecast_df.iloc[:-3] if len(forecast_df) > 3 else forecast_df
     last_actual = actuals['yhat'].iloc[-1]
@@ -9,7 +15,7 @@ def generate_recommendations(forecast_df, rfm_df, declining_df):
     pct_change = (next_forecast - last_actual) / last_actual if last_actual > 0 else 0
     at_risk_share = (rfm_df['segment'] == 'At Risk').sum() / len(rfm_df) if len(rfm_df) > 0 else 0
 
-    if pct_change < -0.05 and at_risk_share > 0.20:
+    if pct_change < forecast_threshold and at_risk_share > at_risk_threshold:
         at_risk_count = (rfm_df['segment'] == 'At Risk').sum()
         recommendations.append({
             'priority': 'HOCH',
