@@ -35,6 +35,18 @@ Ein interaktives BI-Dashboard mit integriertem KI-Entscheidungsagenten für eine
 | Forecasting | Prophet (Facebook) |
 | Versionierung | GitHub |
 
+### Framework-Entscheid: Python + Streamlit statt R + Shiny
+
+Der Kurs hat primär R und Shiny für interaktive Dashboards eingeführt. Für dieses Projekt wurde bewusst **Python + Streamlit** gewählt, weil:
+
+1. **KI-Integration**: Die wichtigsten KI/ML-Bibliotheken (Prophet, scikit-learn, pandas) sind Python-nativ. Die Integration in R wäre via `reticulate` möglich, aber umständlich und fehleranfällig.
+2. **Konsistenz**: Mit Python läuft die gesamte Pipeline — Datenverarbeitung, Analyse, Forecasting und Dashboard — in einer einzigen Sprache. Ein Hybrid (R für Dashboard, Python für KI) würde unnötige Komplexität einführen.
+3. **Kurskonsistenz**: Week 08 des Kurses verwendete bereits Python (`SimpleAutoencoder.py`, Prophet-Guide auf Python-Basis). Python ist also kurskonform.
+4. **Streamlit vs. Shiny**: Streamlit hat eine flachere Lernkurve als Shiny — ein vollständiges Dashboard benötigt weniger Boilerplate-Code. Die reaktive Logik ist intuitiver für Python-Entwickler.
+5. **Portfolio-Relevanz**: Python + Streamlit ist in der Industrie deutlich verbreiteter als R + Shiny. Das Projekt ist direkt als Portfolio-Arbeit auf GitHub nutzbar.
+
+R + Shiny wäre die richtige Wahl gewesen, wenn die KI-Komponente entfallen würde und das Projekt rein deskriptiv wäre.
+
 ### Datenbankentscheid: SQLite statt MySQL
 
 Der Kurs verwendete MySQL (inkl. `MysqlConnector.py`). Für dieses Projekt wurde bewusst **SQLite** gewählt, weil:
