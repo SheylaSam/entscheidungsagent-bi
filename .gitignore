@@ -1,0 +1,7 @@
+data/online_retail_II.xlsx
+data/retail.db
+__pycache__/
+.pytest_cache/
+*.pyc
+.DS_Store
+.superpowers/
