@@ -106,3 +106,22 @@ Der Entscheidungsagent (`src/decision_agent.py`) kombiniert drei Datenquellen un
 | 3 | Keine der obigen Regeln trifft zu | Kein unmittelbarer Handlungsbedarf | TIEF |
 
 Die Regeln werden sequenziell geprüft; mehrere Empfehlungen (Regel 1 + 2 gleichzeitig) sind möglich. Jede Empfehlung enthält **Befund**, **Entscheid** und **Begründung** mit konkreten Datenpunkten aus der Analyse.
+
+---
+
+## Screenshots
+
+**Tab 1 — Übersicht**
+![Übersicht](docs/screenshots/tab1-uebersicht.png)
+
+**Tab 2 — Forecast**
+![Forecast](docs/screenshots/tab2-forecast.png)
+
+**Tab 3 — Kunden RFM**
+![Kunden RFM](docs/screenshots/tab3-rfm.png)
+
+**Tab 4 — Produkte**
+![Produkte](docs/screenshots/tab4-produkte.png)
+
+**Tab 5 — KI-Entscheid**
+![KI-Entscheid](docs/screenshots/tab5-ki.png)
