@@ -50,12 +50,18 @@ def compute_rfm(df: pd.DataFrame) -> pd.DataFrame:
     return rfm
 
 
-def load_rfm(conn: sqlite3.Connection, start_date: str, end_date: str) -> pd.DataFrame:
-    df = pd.read_sql(
+def load_rfm(
+    conn: sqlite3.Connection,
+    start_date: str,
+    end_date: str,
+    countries: tuple = (),
+) -> pd.DataFrame:
+    placeholders = ','.join(['?' for _ in countries])
+    sql = (
         "SELECT customer_id, invoice, invoice_date, revenue FROM transactions"
-        " WHERE invoice_date >= ? AND invoice_date <= ?",
-        conn,
-        params=(start_date, end_date + ' 23:59:59'),
-        parse_dates=['invoice_date'],
+        f" WHERE invoice_date >= ? AND invoice_date <= ?"
+        f" AND country IN ({placeholders})"
     )
+    params = (start_date, end_date + ' 23:59:59') + countries
+    df = pd.read_sql(sql, conn, params=params, parse_dates=['invoice_date'])
     return compute_rfm(df)

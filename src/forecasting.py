@@ -17,13 +17,20 @@ except ValueError:
 from prophet import Prophet
 
 
-def prepare_monthly_series(conn: sqlite3.Connection, start_date: str, end_date: str) -> pd.DataFrame:
-    df = pd.read_sql(
-        "SELECT invoice_date, revenue FROM transactions WHERE invoice_date >= ? AND invoice_date <= ?",
-        conn,
-        params=(start_date, end_date + ' 23:59:59'),
-        parse_dates=['invoice_date'],
+def prepare_monthly_series(
+    conn: sqlite3.Connection,
+    start_date: str,
+    end_date: str,
+    countries: tuple = (),
+) -> pd.DataFrame:
+    placeholders = ','.join(['?' for _ in countries])
+    sql = (
+        "SELECT invoice_date, revenue FROM transactions"
+        f" WHERE invoice_date >= ? AND invoice_date <= ?"
+        f" AND country IN ({placeholders})"
     )
+    params = (start_date, end_date + ' 23:59:59') + countries
+    df = pd.read_sql(sql, conn, params=params, parse_dates=['invoice_date'])
     monthly = (
         df.set_index('invoice_date')
         .resample('MS')['revenue']
@@ -46,9 +53,10 @@ def load_forecast(
     conn: sqlite3.Connection,
     start_date: str,
     end_date: str,
+    countries: tuple = (),
     periods: int = 3,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Returns (monthly_actuals, forecast_df)."""
-    series = prepare_monthly_series(conn, start_date, end_date)
+    series = prepare_monthly_series(conn, start_date, end_date, countries)
     forecast = forecast_revenue(series, periods=periods)
     return series, forecast

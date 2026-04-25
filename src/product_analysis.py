@@ -27,20 +27,21 @@ def load_product_analysis(
     conn: sqlite3.Connection,
     start_date: str,
     end_date: str,
+    countries: tuple = (),
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Returns (top_products_df, declining_products_df)."""
-    df = pd.read_sql(
-        """
+    placeholders = ','.join(['?' for _ in countries])
+    sql = f"""
         SELECT stock_code, description,
                strftime('%Y-%m', invoice_date) AS month,
                SUM(revenue) AS revenue
         FROM transactions
         WHERE invoice_date >= ? AND invoice_date <= ?
+        AND country IN ({placeholders})
         GROUP BY stock_code, description, month
-        """,
-        conn,
-        params=(start_date, end_date + ' 23:59:59'),
-    )
+        """
+    params = (start_date, end_date + ' 23:59:59') + countries
+    df = pd.read_sql(sql, conn, params=params)
 
     total = (
         df.groupby(['stock_code', 'description'])['revenue']

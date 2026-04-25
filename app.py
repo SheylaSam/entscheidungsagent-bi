@@ -36,18 +36,41 @@ st.sidebar.divider()
 
 
 @st.cache_data
-def load_all(start_date: str, end_date: str):
+def get_countries() -> list[str]:
     conn = get_connection()
-    rfm = load_rfm(conn, start_date, end_date)
-    actuals, forecast = load_forecast(conn, start_date, end_date)
-    top_products, declining = load_product_analysis(conn, start_date, end_date)
+    df = pd.read_sql("SELECT DISTINCT country FROM transactions ORDER BY country", conn)
+    conn.close()
+    return df['country'].tolist()
+
+
+all_countries = get_countries()
+
+st.sidebar.header("Land")
+selected_countries = st.sidebar.multiselect(
+    "Länder", options=all_countries, default=all_countries
+)
+
+if not selected_countries:
+    st.sidebar.warning("Mindestens 1 Land auswählen.")
+    st.stop()
+
+countries_tuple = tuple(selected_countries)
+st.sidebar.divider()
+
+
+@st.cache_data
+def load_all(start_date: str, end_date: str, countries: tuple):
+    conn = get_connection()
+    rfm = load_rfm(conn, start_date, end_date, countries)
+    actuals, forecast = load_forecast(conn, start_date, end_date, countries)
+    top_products, declining = load_product_analysis(conn, start_date, end_date, countries)
     conn.close()
     recs = generate_recommendations(forecast, rfm, declining)
     return rfm, actuals, forecast, top_products, declining, recs
 
 
 rfm, actuals, forecast, top_products, declining, recs = load_all(
-    start_date.isoformat(), end_date.isoformat()
+    start_date.isoformat(), end_date.isoformat(), countries_tuple
 )
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
