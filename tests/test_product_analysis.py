@@ -1,5 +1,5 @@
 import pandas as pd
-from src.product_analysis import get_top_products, get_declining_products
+from src.product_analysis import get_top_products, get_declining_products, filter_product_rows
 
 
 def make_monthly_product_df():
@@ -42,3 +42,13 @@ def test_declining_products_ignores_2_month_decline():
     df = make_monthly_product_df()
     result = get_declining_products(df, months=3)
     assert 'C' not in result['stock_code'].values
+
+
+def test_filter_product_rows_removes_non_product_entries():
+    df = pd.DataFrame({
+        'stock_code': ['85123A', 'POST', 'BANK CHARGES', 'M', 'DOT'],
+        'description': ['Widget', 'POSTAGE', 'Bank Charges', 'Manual', 'Dotcom postage'],
+        'revenue': [100.0, 20.0, 10.0, 5.0, 3.0],
+    })
+    result = filter_product_rows(df)
+    assert result['stock_code'].tolist() == ['85123A']

@@ -90,8 +90,8 @@ data_processing.py  ──►  SQLite (.db)
 | Ubersicht | KPI-Metriken (Gesamtumsatz, aktive Kunden, At-Risk-Kunden, Forecast); Umsatz-Trend-Balkendiagramm; Kundensegmente-Übersicht; Top-KI-Empfehlung |
 | Forecast | Prophet-Prognose mit historischem Monatsumsatz und 3-Monats-Forecast inkl. Konfidenzintervall; Metric-Cards fur die drei Forecastmonate |
 | Kunden RFM | RFM-Scatter-Plot (Recency vs. Frequency, Grösse = Monetary); Segmenttabelle mit Anzahl und Umsatz; Top 10 At-Risk-Kunden |
-| Produkte | Top-10-Produkte nach Umsatz (horizontal bar); Liste rückläufiger Produkte (≥3 Monate Rückgang) |
-| KI-Entscheid | Alle Empfehlungen des Entscheidungsagenten mit Befund, Entscheid und Begründung; Übersichtstabelle der Entscheidungsregeln |
+| Produkte | Top-10-Produkte nach Umsatz (ohne Versand/Gebühren/Korrekturen); Liste signifikant rückläufiger Produkte (≥3 Monate Rückgang + letzter Monat <50% Durchschnitt); Produkt-Drilldown |
+| KI-Entscheid | Alle Empfehlungen des Entscheidungsagenten mit Befund, Entscheid und Begründung; Live-Regelstatus; anpassbare Schwellwerte für Regel 1 |
 
 ---
 
@@ -101,11 +101,26 @@ Der Entscheidungsagent (`src/decision_agent.py`) kombiniert drei Datenquellen un
 
 | Regel | Bedingung | Entscheid | Priorität |
 |---|---|---|---|
-| 1 | Forecast < -5% UND At-Risk-Anteil > 20% der Kundenbasis | Reaktivierungskampagne fur At-Risk-Kunden starten | HOCH |
-| 2 | Mindestens 1 Produkt mit ≥3 Monaten rückläufigem Umsatz | Sortiment bereinigen: betroffene Produkte prüfen und ggf. absetzen | MITTEL |
-| 3 | Keine der obigen Regeln trifft zu | Kein unmittelbarer Handlungsbedarf | TIEF |
+| 1 | Forecast < -5% UND At-Risk-Anteil > 20% der Kundenbasis | Reaktivierungskampagne für At-Risk-Kunden starten | HOCH |
+| 2 | ≥1 Produkt mit ≥3 Monaten rückläufigem Umsatz | Sortiment bereinigen: betroffene Produkte prüfen und ggf. absetzen | MITTEL |
+| 3 | Champion-Anteil < 10% der Kundenbasis | Kundenbindungsprogramm aufbauen: Loyal-Kunden zu Champions entwickeln | MITTEL |
+| 4 | Neukunden-Anteil < 5% der Kundenbasis | Neukundenakquisition ausbauen: Marketing-Kanäle und Erstbestellangebote prüfen | MITTEL |
+| 5 | Top-20%-Kunden generieren >80% des Umsatzes | Kundenstamm diversifizieren: Abhängigkeit von Schlüsselkunden reduzieren | MITTEL |
+| 6 | Keine der obigen Regeln trifft zu | Kein unmittelbarer Handlungsbedarf | TIEF |
 
-Die Regeln werden sequenziell geprüft; mehrere Empfehlungen (Regel 1 + 2 gleichzeitig) sind möglich. Jede Empfehlung enthält **Befund**, **Entscheid** und **Begründung** mit konkreten Datenpunkten aus der Analyse.
+Die Regeln werden sequenziell geprüft; mehrere Empfehlungen (z.B. Regel 1 + 2 + 3 gleichzeitig) sind möglich. Jede Empfehlung enthält **Befund**, **Entscheid** und **Begründung** mit konkreten Datenpunkten aus der Analyse.
+
+Die Standard-Schwellwerte sind im Code als `AgentThresholds` dokumentiert. Regel 1 kann im Dashboard live angepasst werden; die übrigen Regeln bleiben bewusst deterministisch, damit Empfehlungen reproduzierbar und auditierbar bleiben.
+
+---
+
+## Qualitätssicherung
+
+```bash
+pytest -q
+```
+
+Aktueller Stand: **42 Tests** für Datenbereinigung, RFM, Forecasting, Produktfilter, Länderlogik und Entscheidungsregeln.
 
 ---
 

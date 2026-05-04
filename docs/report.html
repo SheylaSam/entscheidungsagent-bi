@@ -280,7 +280,8 @@
   <li><strong>Stornierungen:</strong> Invoice-Nummern beginnend mit «C» (negative Quantities) — werden vollständig entfernt</li>
   <li><strong>Fehlende Customer IDs:</strong> ~25% der Zeilen enthalten keine Kundennummer — für RFM nicht verwendbar, werden gefiltert</li>
   <li><strong>Negative/Null-Preise:</strong> Testbestellungen und interne Buchungen mit Price ≤ 0 — werden entfernt</li>
-  <li><strong>Testcodes:</strong> StockCodes wie «POSTAGE», «BANK CHARGES», «M» — nicht-produktbezogene Einträge</li>
+  <li><strong>Customer-ID-Normalisierung:</strong> Kundennummern werden als Text gespeichert, damit Excel-Importwerte wie <code>17850.0</code> stabil als <code>17850</code> verarbeitet werden</li>
+  <li><strong>Produktfilter:</strong> Nicht-produktbezogene Positionen wie Versand, Bankgebühren und manuelle Korrekturen werden aus Produkt-Rankings und Sortimentsregeln ausgeschlossen</li>
 </ul>
 
 <p>Nach der Bereinigung bleiben ca. 750'000–800'000 verwertbare Transaktionszeilen für die Analyse.</p>
@@ -399,6 +400,7 @@ Forecasting       Segmentierung          Analyse
   <tr><td><code>src/rfm_analysis.py</code></td><td>RFM-Berechnung pro Kunde (Recency / Frequency / Monetary), Quintil-Scoring, Segment-Zuweisung.</td></tr>
   <tr><td><code>src/forecasting.py</code></td><td>Monatsaggregation, Prophet-Fit, 3-Monats-Prognose mit Konfidenzintervall.</td></tr>
   <tr><td><code>src/product_analysis.py</code></td><td>Top-10-Produkte nach Umsatz, Erkennung von Produkten mit ≥3 aufeinanderfolgenden Monatsrückgängen.</td></tr>
+  <tr><td><code>src/customer_analysis.py</code></td><td>Eindeutige Zuordnung eines Hauptlands pro Kunde und länderbasierte Segmentauswertung ohne Doppelzählung.</td></tr>
   <tr><td><code>src/decision_agent.py</code></td><td>Regelbasierter Agent: kombiniert alle drei Analysen und erzeugt priorisierte Empfehlungen.</td></tr>
   <tr><td><code>app.py</code></td><td>Streamlit-Hauptapplikation mit 5 Tabs und <code>@st.cache_data</code>-Caching aller Datenladeoperationen.</td></tr>
 </table>
@@ -474,27 +476,41 @@ Forecasting       Segmentierung          Analyse
 
 <h2>6.1 Prophet-Zeitreihenprognose</h2>
 
-<p>Das Modul <code>src/forecasting.py</code> erstellt eine 3-Monats-Umsatzprognose mithilfe des Prophet-Bibliothek von Meta (ehemals Facebook). Prophet ist ein additives Zeitreihenmodell, das automatisch Trend, wöchentliche und jährliche Saisonalität erkennt und bei fehlenden Werten robust ist.</p>
+<p>Das Modul <code>src/forecasting.py</code> erstellt eine 3-Monats-Umsatzprognose mithilfe der Prophet-Bibliothek von Meta (ehemals Facebook). Prophet ist ein additives Zeitreihenmodell, das Trend und jährliche Saisonalität getrennt modelliert und bei fehlenden Werten robust ist.</p>
 
 <h3>Datenvorbereitung</h3>
-<p>Die Transaktionsdaten werden auf Monatsebene aggregiert. Prophet erwartet zwei Spalten: <code>ds</code> (Datum) und <code>y</code> (Wert):</p>
+<p>Die Transaktionsdaten werden auf Monatsebene aggregiert. Prophet erwartet zwei Spalten: <code>ds</code> (Datum) und <code>y</code> (Wert). Eine Besonderheit des Datensatzes ist das Enddatum: Die Daten enden am 9. Dezember 2011 — der Dezember ist damit mit nur 9 von 31 Tagen erfasst. Würde dieser unvollständige Monat in das Training einfliessen, würde Prophet einen künstlichen Umsatzeinbruch von rund 60% gegenüber dem tatsächlichen Dezemberwert lernen und entsprechend pessimistische Prognosen für die Folgemonate erzeugen.</p>
 
-<pre><code>SELECT DATE(invoice_date, 'start of month') as month,
-       SUM(revenue) as revenue
-FROM transactions
-GROUP BY month
-ORDER BY month</code></pre>
+<p>Um diesen Effekt zu verhindern, wird der letzte Monat der Trainingsserie automatisch entfernt, falls er nicht vollständig ist:</p>
+
+<pre><code># Unvollständigen letzten Monat aus dem Training ausschliessen
+last_month_end = monthly['ds'].iloc[-1] + pd.offsets.MonthEnd(1)
+if pd.Timestamp(end_date) &lt; last_month_end:
+    monthly = monthly.iloc[:-1]</code></pre>
+
+<p>Das Training erfolgt auf vollständigen Monaten (Dez 2009 – Nov 2011), die Prognose deckt die drei darauffolgenden Monate ab.</p>
 
 <h3>Modellierung und Prognose</h3>
 
 <pre><code>from prophet import Prophet
 
-model = Prophet(yearly_seasonality=True, weekly_seasonality=False)
-model.fit(series)   # series: DataFrame mit ds/y-Spalten
+model = Prophet(yearly_seasonality=2, weekly_seasonality=False, daily_seasonality=False)
+model.fit(series)
 future = model.make_future_dataframe(periods=3, freq='MS')
 forecast = model.predict(future)</code></pre>
 
-<p>Das Modell gibt für jeden Monat drei Werte zurück: <code>yhat</code> (Punktprognose), <code>yhat_lower</code> und <code>yhat_upper</code> (80%-Konfidenzintervall). Im Dashboard werden historische Werte als Linie und die Prognosewerte als schraffiertes Band dargestellt.</p>
+<p>Der Parameter <code>yearly_seasonality=2</code> entspricht einem Fourier-Order von 2 (4 Parameter für die Saisonkomponente). Gegenüber dem Default-Wert von 10 reduziert dies das Overfitting-Risiko bei einer kurzen Trainingsserie von rund 24 Monaten erheblich.</p>
+
+<p>Das Modell gibt für jeden Monat drei Werte zurück: <code>yhat</code> (Punktprognose), <code>yhat_lower</code> und <code>yhat_upper</code> (80%-Konfidenzintervall). Im Dashboard werden historische Werte als durchgezogene Linie und die Prognosewerte als gestrichelte Linie mit schraffiertem Konfidenzband dargestellt.</p>
+
+<h3>Bekannte Modellgrenzen</h3>
+
+<p><strong>Saisonaler Rückgang im Sommer:</strong> Der Datensatz stammt von einem britischen Geschenkartikel-Versandhandel, dessen Hauptsaison im November/Dezember liegt (Weihnachtsgeschäft). Prophet erkennt dieses Muster automatisch und prognostiziert für Sommermonate (Juli–September) entsprechend niedrigere Werte. Dies ist kein Modellfehler, sondern korrektes Verhalten auf Basis der historischen Datenlage.</p>
+
+<p><strong>Negative Forecast-Werte:</strong> Prophets additives Modell berechnet den Forecast als Summe aus Trend- und Saisonalitätskomponente: <code>yhat = trend + yearly_seasonality</code>. Wenn der saisonale Korrekturfaktor in einem schwachen Monat betragsmässig grösser ist als der Trendwert, kann <code>yhat</code> rechnerisch negativ werden — ein bekanntes Artefakt additiver Zeitreihenmodelle. Da ein negativer Umsatz ökonomisch nicht sinnvoll ist, werden <code>yhat</code> und <code>yhat_lower</code> vor der Ausgabe auf 0 beschränkt:</p>
+
+<pre><code>forecast['yhat']       = forecast['yhat'].clip(lower=0)
+forecast['yhat_lower'] = forecast['yhat_lower'].clip(lower=0)</code></pre>
 
 <h2>6.2 RFM-Kundensegmentierung</h2>
 
@@ -531,7 +547,7 @@ forecast = model.predict(future)</code></pre>
 <p>Das Modul <code>src/product_analysis.py</code> liefert zwei Analysen:</p>
 
 <h3>Top-10-Produkte</h3>
-<p>Aggregation des Gesamtumsatzes je Produkt (StockCode + Description), Auswahl der 10 grössten Positionen. Dargestellt als horizontales Balkendiagramm im Dashboard.</p>
+<p>Aggregation des Gesamtumsatzes je Produkt (StockCode + Description), Auswahl der 10 grössten Positionen. Vor der Aggregation werden nicht-produktbezogene StockCodes wie Versand, Bankgebühren, manuelle Korrekturen und Dotcom-Porto ausgeschlossen. Dadurch zeigt das Ranking echte Sortimentsartikel und keine Nebenkostenpositionen. Dargestellt wird das Ergebnis als horizontales Balkendiagramm im Dashboard.</p>
 
 <h3>Rückläufige Produkte</h3>
 <p>Für jeden Monat wird der Monatsumsatz je Produkt berechnet. Anschliessend wird geprüft, ob der Umsatz über ≥3 aufeinanderfolgende Monate konsistent gesunken ist. Diese Produkte gelten als «rückläufig» und werden dem Entscheidungsagenten übergeben.</p>
@@ -545,6 +561,10 @@ forecast = model.predict(future)</code></pre>
         if all(last_n[i] > last_n[i+1] for i in range(len(last_n)-1)):
             declining.append(product)
     return declining</code></pre>
+
+<h2>6.4 Länderbasierte Kundenauswertung</h2>
+
+<p>Für den Tab «Kunden RFM» wird jedem Kunden genau ein Hauptland zugeordnet. Falls ein Kunde in mehreren Ländern vorkommt, wird das Land mit dem höchsten Umsatz im gewählten Zeitraum verwendet. Dadurch werden Kunden und Monetary-Werte in der Länderübersicht nicht mehrfach gezählt. Diese Logik ist in <code>src/customer_analysis.py</code> gekapselt und wird separat getestet.</p>
 </div>
 
 <!-- 7. KI-ENTSCHEIDUNGSAGENT -->
@@ -575,16 +595,37 @@ forecast = model.predict(future)</code></pre>
 
 <div class="box box-rule">
   <div class="box-title">Regel 2 — Sortimentsbereinigung <span class="prio-mittel">MITTEL</span></div>
-  <p><strong>Bedingung:</strong> Mindestens 1 Produkt mit ≥3 aufeinanderfolgenden Monatsrückgängen</p>
+  <p><strong>Bedingung:</strong> Mindestens 1 Produkt mit ≥3 aufeinanderfolgenden Monatsrückgängen und letztem Monatsumsatz unter 50% des Produktdurchschnitts</p>
   <p><strong>Entscheid:</strong> Rückläufige Produkte aus dem Sortiment nehmen oder repositionieren</p>
   <p><strong>Logik:</strong> Ein anhaltender Umsatzrückgang über 3+ Monate ist kein saisonales Muster, sondern ein strukturelles Problem (sinkende Nachfrage, Qualitätsprobleme, Wettbewerb).</p>
 </div>
 
 <div class="box box-rule">
-  <div class="box-title">Regel 3 — Kein Handlungsbedarf <span class="prio-tief">TIEF</span></div>
-  <p><strong>Bedingung:</strong> Keine der obigen Regeln greift</p>
-  <p><strong>Entscheid:</strong> Aktuelle Strategie beibehalten</p>
-  <p><strong>Logik:</strong> Positive oder stabile Forecasts ohne Kundenabwanderung und ohne rückläufige Produkte indizieren, dass kein kurzfristiger Handlungsbedarf besteht.</p>
+  <div class="box-title">Regel 3 — Kundenbindung stärken <span class="prio-mittel">MITTEL</span></div>
+  <p><strong>Bedingung:</strong> Champion-Anteil &lt;10% der Kundenbasis</p>
+  <p><strong>Entscheid:</strong> Kundenbindungsprogramm aufbauen und Loyal-Kunden aktiv zu Champions entwickeln</p>
+  <p><strong>Logik:</strong> Ein zu kleiner Champion-Anteil schwächt Wiederholungsumsätze und erhöht die Abhängigkeit von kurzfristiger Akquisition.</p>
+</div>
+
+<div class="box box-rule">
+  <div class="box-title">Regel 4 — Neukundenakquisition prüfen <span class="prio-mittel">MITTEL</span></div>
+  <p><strong>Bedingung:</strong> Neukunden-Anteil &lt;5% der Kundenbasis</p>
+  <p><strong>Entscheid:</strong> Marketing-Kanäle und Erstbestellangebote prüfen und ausbauen</p>
+  <p><strong>Logik:</strong> Ohne kontinuierlichen Neukunden-Zufluss schrumpft der Kundenstamm langfristig durch natürliche Abwanderung.</p>
+</div>
+
+<div class="box box-rule">
+  <div class="box-title">Regel 5 — Klumpenrisiko reduzieren <span class="prio-mittel">MITTEL</span></div>
+  <p><strong>Bedingung:</strong> Top-20%-Kunden generieren &gt;80% des Umsatzes</p>
+  <p><strong>Entscheid:</strong> Kundenstamm diversifizieren und Abhängigkeit von wenigen Schlüsselkunden reduzieren</p>
+  <p><strong>Logik:</strong> Hohe Umsatzkonzentration macht das Geschäft anfällig für den Verlust einzelner Grosskunden.</p>
+</div>
+
+<div class="box box-rule">
+  <div class="box-title">Regel 6 — Kein Handlungsbedarf <span class="prio-tief">TIEF</span></div>
+  <p><strong>Bedingung:</strong> Keine der Risiko- oder Optimierungsregeln greift</p>
+  <p><strong>Entscheid:</strong> Aktuelle Strategie beibehalten und regulär überwachen</p>
+  <p><strong>Logik:</strong> Stabile Forecasts, gesunde Kundensegmente, keine signifikant rückläufigen Produkte und geringe Umsatzkonzentration sprechen gegen kurzfristigen Handlungsbedarf.</p>
 </div>
 
 <h2>Empfehlungsformat</h2>
@@ -598,7 +639,11 @@ forecast = model.predict(future)</code></pre>
     "reasoning":  "Forecast: –8%, At-Risk: 23% ..."  # Welche Metriken
 }</code></pre>
 
-<p>Mehrere Regeln können gleichzeitig zutreffen. In diesem Fall werden alle aktiven Empfehlungen zurückgegeben, nach Priorität absteigend sortiert.</p>
+<p>Mehrere Regeln können gleichzeitig zutreffen. In diesem Fall werden alle aktiven Empfehlungen zurückgegeben. Die Regel mit Priorität HOCH erscheint zuerst, weil sie vor den mittleren Optimierungsregeln geprüft wird.</p>
+
+<h2>Schwellwerte und Kalibrierung</h2>
+
+<p>Die Regeln verwenden bewusst explizite Management-Schwellwerte statt eines Black-Box-Modells. Die Standardwerte sind im Code als <code>AgentThresholds</code> dokumentiert: -5% Forecast-Rückgang, 20% At-Risk-Anteil, 50% Produktumsatz gegenüber Durchschnitt, 10% Champion-Anteil, 5% Neukunden-Anteil und 80% Umsatzanteil der Top-20%-Kunden. Im Dashboard können die beiden Schwellwerte der Hoch-Prioritätsregel interaktiv verändert werden, um Sensitivität und Konsequenz der Entscheidung transparent zu machen.</p>
 </div>
 
 <div class="page-break"></div>
@@ -615,7 +660,7 @@ forecast = model.predict(future)</code></pre>
   <tr><th>Tab</th><th>Inhalt</th><th>Zielgruppe</th></tr>
   <tr>
     <td><strong>1 — Übersicht</strong></td>
-    <td>4 KPI-Kacheln (Umsatz, Kunden, Bestellungen, Forecast-Delta), Mini-Trendchart, Kundensegment-Balken, kompakte KI-Alert-Box</td>
+    <td>4 KPI-Kacheln (Umsatz, aktive Kunden, At-Risk-Kunden, Forecast nächster Monat), Mini-Trendchart, Kundensegment-Balken, kompakte KI-Alert-Box</td>
     <td>Management, Executive View</td>
   </tr>
   <tr>
@@ -625,17 +670,17 @@ forecast = model.predict(future)</code></pre>
   </tr>
   <tr>
     <td><strong>3 — Kunden RFM</strong></td>
-    <td>Scatter Plot (Recency vs. Frequency, Grösse = Monetary), Segmentzusammenfassung als Tabelle, At-Risk-Kundenliste</td>
+    <td>Scatter Plot (Recency vs. Frequency, Grösse = Monetary), Segmentzusammenfassung als Tabelle, At-Risk-Kundenliste, Kundensegmente nach Land</td>
     <td>Marketing, CRM</td>
   </tr>
   <tr>
     <td><strong>4 — Produkte</strong></td>
-    <td>Top-10 horizontales Balkendiagramm, Tabelle rückläufiger Produkte</td>
+    <td>Top-10 horizontales Balkendiagramm, Tabelle rückläufiger Produkte, Produkt-Drilldown, Umsatz nach Land</td>
     <td>Category Management, Einkauf</td>
   </tr>
   <tr>
     <td><strong>5 — KI-Entscheid</strong></td>
-    <td>Farbkodierte Empfehlungskarten (Rot=HOCH, Gelb=MITTEL, Grün=TIEF), vollständige Begründung, Entscheidungslogik-Tabelle</td>
+    <td>Farbkodierte Empfehlungskarten (Rot=HOCH, Gelb=MITTEL, Grün=TIEF), vollständige Begründung, Live-Regelstatus, anpassbare Schwellwerte für Regel 1</td>
     <td>Management, Entscheidungsträger</td>
   </tr>
 </table>
@@ -644,12 +689,12 @@ forecast = model.predict(future)</code></pre>
 
 <h3>Caching</h3>
 <pre><code>@st.cache_data
-def load_data():
+def load_all(start_date, end_date, countries):
     conn = get_connection()
-    rfm     = load_rfm(conn)
-    actuals, forecast = load_forecast(conn)
-    top_prod, declining = load_product_analysis(conn)
-    recs    = generate_recommendations(forecast, rfm, declining)
+    rfm = load_rfm(conn, start_date, end_date, countries)
+    actuals, forecast = load_forecast(conn, start_date, end_date, countries)
+    top_prod, declining = load_product_analysis(conn, start_date, end_date, countries)
+    recs = generate_recommendations(forecast, rfm, declining, actuals_df=actuals)
     return rfm, actuals, forecast, top_prod, declining, recs</code></pre>
 
 <h3>Prioritäts-Farbkodierung (Tab 5)</h3>
@@ -671,30 +716,32 @@ for rec in recommendations:
 <div class="chapter">
 <h1>Testing und Qualitätssicherung</h1>
 
-<p>Das Projekt verwendet Test-Driven Development (TDD) mit pytest. Alle fünf Module haben dedizierte Testdateien. Insgesamt sind 22 Tests implementiert, die vollständig auf synthetischen In-Memory-Daten laufen — keine echte Datenbank oder Excel-Datei nötig.</p>
+<p>Das Projekt verwendet pytest für automatisierte Qualitätssicherung. Alle Analyse- und Agentenmodule haben dedizierte Testdateien. Insgesamt sind 42 Tests implementiert, die vollständig auf synthetischen Daten laufen — keine echte Datenbank oder Excel-Datei nötig.</p>
 
 <h2>Testübersicht</h2>
 
 <table>
   <tr><th>Testdatei</th><th>Anzahl Tests</th><th>Abgedeckte Fälle</th></tr>
   <tr><td><code>tests/test_data_processing.py</code></td><td>6</td><td>Bereinigung, Stornierungen, fehlende IDs, Revenue-Berechnung, DB-Schreiben/Lesen</td></tr>
-  <tr><td><code>tests/test_rfm_analysis.py</code></td><td>5</td><td>RFM-Berechnung, Segmentzuweisung (Champions, At Risk, Lost, New), Scoring</td></tr>
-  <tr><td><code>tests/test_forecasting.py</code></td><td>3</td><td>Monatsserie-Aggregation, Prophet-Forecast Ausgabestruktur, Prognosehorizont</td></tr>
-  <tr><td><code>tests/test_product_analysis.py</code></td><td>4</td><td>Top-N-Selektion, rückläufige Produkte (3-Monats-Regel), Grenzfälle</td></tr>
-  <tr><td><code>tests/test_decision_agent.py</code></td><td>4</td><td>Regel 1 (HOCH), Regel 2 (MITTEL), Regel 3 (TIEF), Mehrfachregeln</td></tr>
-  <tr><td><strong>Total</strong></td><td><strong>22</strong></td><td></td></tr>
+  <tr><td><code>tests/test_rfm_analysis.py</code></td><td>7</td><td>RFM-Berechnung, Segmentzuweisung (Champions, At Risk, Lost, New, Loyal, Others), Scoring bei kleinen Datenmengen</td></tr>
+  <tr><td><code>tests/test_forecasting.py</code></td><td>5</td><td>Prophet-Forecast Ausgabestruktur, Prognosehorizont, Backtest-Metriken, Grenzfall mit zu wenigen Daten</td></tr>
+  <tr><td><code>tests/test_product_analysis.py</code></td><td>5</td><td>Top-N-Selektion, rückläufige Produkte (3-Monats-Regel), Sonderpositionsfilter, Grenzfälle</td></tr>
+  <tr><td><code>tests/test_customer_analysis.py</code></td><td>2</td><td>Hauptland pro Kunde, länderbasierte Segmentauswertung ohne Doppelzählung</td></tr>
+  <tr><td><code>tests/test_decision_agent.py</code></td><td>17</td><td>Regeln 1–6, Schwellwerte, dünne Datenbasis, negativer Forecast, erster zukünftiger Forecast-Monat, Empfehlungsformat</td></tr>
+  <tr><td><strong>Total</strong></td><td><strong>42</strong></td><td></td></tr>
 </table>
 
 <h2>Testausführung</h2>
 
 <pre><code>$ pytest tests/ -v
 ======================== test session starts =========================
-tests/test_data_processing.py ......                           [  6/22]
-tests/test_rfm_analysis.py .....                               [11/22]
-tests/test_forecasting.py ...                                  [14/22]
-tests/test_product_analysis.py ....                            [18/22]
-tests/test_decision_agent.py ....                              [22/22]
-======================== 22 passed in 4.32s ==========================</code></pre>
+tests/test_customer_analysis.py ..                             [  2/42]
+tests/test_data_processing.py ......                           [  8/42]
+tests/test_decision_agent.py .................                 [ 25/42]
+tests/test_forecasting.py .....                                [ 30/42]
+tests/test_product_analysis.py .....                           [ 35/42]
+tests/test_rfm_analysis.py .......                             [ 42/42]
+======================== 42 passed in 10.09s =========================</code></pre>
 
 <div class="box box-info">
   <div class="box-title">Design-Entscheid: In-Memory Tests</div>
@@ -717,19 +764,29 @@ tests/test_decision_agent.py ....                              [22/22]
 <h2>Erkenntnisse</h2>
 
 <ul>
-  <li><strong>Datenqualität ist entscheidend:</strong> ~25–30% der Rohtransaktionen werden in der Bereinigung entfernt (Stornierungen, fehlende Kundennummern, Testeinträge). Ohne diese Bereinigung würden alle Analysen verzerrte Resultate liefern.</li>
+  <li><strong>Datenqualität ist entscheidend:</strong> ~25–30% der Rohtransaktionen werden in der Bereinigung entfernt (Stornierungen, fehlende Kundennummern, Null- und Negativpreise). Ohne diese Bereinigung würden alle Analysen verzerrte Resultate liefern.</li>
+  <li><strong>BI-Output braucht fachliche Filter:</strong> Versand, Bankgebühren und manuelle Korrekturen dürfen nicht als Top-Produkte oder Sortimentsrisiken interpretiert werden.</li>
+  <li><strong>Länderanalysen brauchen eindeutige Kundenzuordnung:</strong> Ein Hauptland pro Kunde verhindert Doppelzählung bei international aktiven Kunden.</li>
   <li><strong>Prophet ist saisonal robust:</strong> Das Modell erkennt die Weihnachts-Saisonalität des Geschenkartikel-Shops automatisch und berücksichtigt sie in der Prognose.</li>
   <li><strong>RFM ist simpel aber wirksam:</strong> Mit nur drei Metriken und einem Quintil-Scoring lassen sich Kunden sinnvoll für gezielte Massnahmen segmentieren.</li>
   <li><strong>Regelbasierter Agent genügt für BI:</strong> Für strukturierte Management-Entscheide auf der Grundlage klarer Metriken ist ein LLM nicht nötig — Transparenz und Determinismus sind wichtiger als Flexibilität.</li>
 </ul>
 
+<h2>Limitationen</h2>
+
+<ul>
+  <li><strong>Historischer Datensatz:</strong> Die Daten enden am 09.12.2011. Forecasts zeigen daher Modellverhalten auf historischen Retail-Daten, keine aktuelle Marktentwicklung.</li>
+  <li><strong>Keine Kausalität:</strong> Die Empfehlungen identifizieren auffällige Muster, beweisen aber keine Ursachen für Umsatzrückgänge oder Kundenabwanderung.</li>
+  <li><strong>Regelbasierte Heuristik:</strong> Die Schwellwerte sind transparent und anpassbar, aber nicht automatisch statistisch optimiert.</li>
+  <li><strong>Keine externen Einflussfaktoren:</strong> Marketingaktionen, Lagerbestand, Wettbewerb und Makroeffekte sind im Datensatz nicht enthalten.</li>
+</ul>
+
 <h2>Mögliche Erweiterungen</h2>
 
 <ul>
-  <li><strong>Länder-Filter:</strong> Dashboard-Filter nach Country (UK, Germany, France etc.) für regionalen Vergleich</li>
-  <li><strong>Zeitraum-Slider:</strong> Interaktiver Datumsfilter für historische Vergleiche</li>
   <li><strong>E-Mail-Alert:</strong> Automatischer Versand der KI-Empfehlung bei Überschreiten der Schwellwerte</li>
-  <li><strong>Erweiterter Agent:</strong> Zusätzliche Regeln (z.B. Länder-basierte Empfehlungen, saisonale Produktvorschläge)</li>
+  <li><strong>Erweiterter Agent:</strong> Zusätzliche Regeln, z.B. saisonale Produktvorschläge oder länderspezifische Massnahmen auf Basis der bestehenden Country-Auswertungen</li>
+  <li><strong>Export-Funktion:</strong> Download der aktuellen Empfehlung und gefilterten Tabellen als PDF oder Excel</li>
   <li><strong>Cloud-Deployment:</strong> Deployment auf Streamlit Community Cloud für öffentlichen Zugang</li>
 </ul>
 

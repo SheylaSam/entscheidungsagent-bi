@@ -2,6 +2,31 @@ import pandas as pd
 import sqlite3
 
 
+NON_PRODUCT_STOCK_CODES = {
+    'POST',
+    'POSTAGE',
+    'BANK CHARGES',
+    'C2',
+    'D',
+    'DOT',
+    'M',
+    'PADS',
+}
+
+
+def filter_product_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep rows that represent sellable products, excluding fees and adjustments."""
+    result = df.copy()
+    result['stock_code'] = result['stock_code'].astype(str).str.strip()
+    result['description'] = result['description'].fillna('').astype(str).str.strip()
+    mask = (
+        result['description'].ne('')
+        & ~result['stock_code'].str.upper().isin(NON_PRODUCT_STOCK_CODES)
+        & ~result['description'].str.upper().isin(NON_PRODUCT_STOCK_CODES)
+    )
+    return result[mask].reset_index(drop=True)
+
+
 def get_top_products(total_df: pd.DataFrame, n: int = 10) -> pd.DataFrame:
     return total_df.nlargest(n, 'revenue').reset_index(drop=True)
 
@@ -19,6 +44,7 @@ def get_declining_products(monthly_df: pd.DataFrame, months: int = 3) -> pd.Data
                 'stock_code': code,
                 'description': group['description'].iloc[0],
                 'revenue_last_month': revenues[-1],
+                'revenue_avg': group['revenue'].mean(),
             })
     return pd.DataFrame(declining)
 
@@ -43,6 +69,7 @@ def load_product_analysis(
         """
     params = (start_date, end_date + ' 23:59:59') + countries
     df = pd.read_sql(sql, conn, params=params)
+    df = filter_product_rows(df)
 
     total = (
         df.groupby(['stock_code', 'description'])['revenue']
@@ -51,7 +78,6 @@ def load_product_analysis(
         .sort_values('revenue', ascending=False)
     )
 
-    df['month_num'] = pd.to_datetime(df['month']).dt.to_period('M').apply(lambda x: x.ordinal)
     top = get_top_products(total)
     declining = get_declining_products(df, months=declining_months)
     return top, declining

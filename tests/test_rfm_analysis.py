@@ -36,3 +36,20 @@ def test_assign_segment_lost():
 def test_assign_segment_new():
     row = pd.Series({'r_score': 5, 'f_score': 1, 'm_score': 2})
     assert assign_segment(row) == 'New'
+
+def test_assign_segment_loyal():
+    row = pd.Series({'r_score': 3, 'f_score': 4, 'm_score': 3})
+    assert assign_segment(row) == 'Loyal'
+
+def test_assign_segment_others():
+    # r=3, f=2 — doesn't match Champions, Loyal, At Risk, Lost, or New
+    row = pd.Series({'r_score': 3, 'f_score': 2, 'm_score': 2})
+    assert assign_segment(row) == 'Others'
+
+def test_qscore_fewer_than_5_customers():
+    from src.rfm_analysis import _qscore
+    series = pd.Series([100, 200, 300])
+    scores = _qscore(series, ascending=True)
+    assert len(scores) == 3
+    assert scores.min() >= 1
+    assert scores.max() <= 3

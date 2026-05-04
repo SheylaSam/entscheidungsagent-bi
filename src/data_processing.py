@@ -32,8 +32,14 @@ def load_to_sqlite(df: pd.DataFrame, db_path: str | Path = DB_PATH) -> None:
     db_path = Path(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
-    df.to_sql('transactions', conn, if_exists='replace', index=False)
-    conn.close()
+    try:
+        df.to_sql('transactions', conn, if_exists='replace', index=False)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_date ON transactions(invoice_date)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_country ON transactions(country)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_date_country ON transactions(invoice_date, country)")
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def get_connection(db_path: str | Path = DB_PATH) -> sqlite3.Connection:

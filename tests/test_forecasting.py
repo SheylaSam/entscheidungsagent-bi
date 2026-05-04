@@ -1,6 +1,6 @@
 # tests/test_forecasting.py
 import pandas as pd
-from src.forecasting import prepare_monthly_series, forecast_revenue
+from src.forecasting import prepare_monthly_series, forecast_revenue, run_backtest
 
 def make_monthly_series():
     dates = pd.date_range('2010-01-01', periods=24, freq='MS')
@@ -22,3 +22,18 @@ def test_forecast_future_dates_are_after_training():
     last_train = series['ds'].max()
     future = result[result['ds'] > last_train]
     assert len(future) == 3
+
+def test_backtest_returns_metrics():
+    series = make_monthly_series()
+    result = run_backtest(series, holdout_months=3)
+    assert result is not None
+    assert {'actuals', 'forecast', 'mape', 'mae'}.issubset(result.keys())
+    assert len(result['actuals']) == 3
+    assert len(result['forecast']) == 3
+    assert result['mape'] >= 0
+    assert result['mae'] >= 0
+
+def test_backtest_returns_none_for_insufficient_data():
+    short = pd.DataFrame({'ds': pd.date_range('2010-01-01', periods=4, freq='MS'), 'y': range(4)})
+    result = run_backtest(short, holdout_months=3)
+    assert result is None
