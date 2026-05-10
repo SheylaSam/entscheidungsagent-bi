@@ -1,17 +1,15 @@
 import pandas as pd
 import sqlite3
 
+from src.semantic import NON_PRODUCT_STOCK_CODES  # re-exported for backward compatibility
 
-NON_PRODUCT_STOCK_CODES = {
-    'POST',
-    'POSTAGE',
-    'BANK CHARGES',
-    'C2',
-    'D',
-    'DOT',
-    'M',
-    'PADS',
-}
+__all__ = [
+    'NON_PRODUCT_STOCK_CODES',
+    'filter_product_rows',
+    'get_top_products',
+    'get_declining_products',
+    'load_product_analysis',
+]
 
 
 def filter_product_rows(df: pd.DataFrame) -> pd.DataFrame:

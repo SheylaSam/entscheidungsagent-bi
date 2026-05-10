@@ -1,21 +1,9 @@
 import pandas as pd
 import sqlite3
 from src.data_processing import get_connection
+from src.semantic import assign_segment  # re-exported for backward compatibility
 
-
-def assign_segment(row: pd.Series) -> str:
-    r, f = row['r_score'], row['f_score']
-    if r == 5 and f >= 4:
-        return 'Champions'
-    if f >= 3 and r >= 3:
-        return 'Loyal'
-    if r <= 2 and f >= 3:
-        return 'At Risk'
-    if r == 1 and f <= 2:
-        return 'Lost'
-    if r >= 4 and f == 1:
-        return 'New'
-    return 'Others'
+__all__ = ['assign_segment', 'compute_rfm', 'load_rfm']
 
 
 def _qscore(series: pd.Series, ascending: bool = True, q: int = 5) -> pd.Series:

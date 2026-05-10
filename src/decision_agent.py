@@ -1,16 +1,15 @@
 import pandas as pd
-from dataclasses import dataclass
 from datetime import datetime
 
+from src.semantic import AgentThresholds  # re-exported for backward compatibility
 
-@dataclass(frozen=True)
-class AgentThresholds:
-    forecast_decline: float = -0.05
-    at_risk_share: float = 0.20
-    declining_product_share: float = 0.50
-    champion_share: float = 0.10
-    new_customer_share: float = 0.05
-    top_customer_revenue_share: float = 0.80
+__all__ = [
+    'AgentThresholds',
+    'compute_agent_kpis',
+    'build_agent_run',
+    'generate_agent_run',
+    'generate_recommendations',
+]
 
 
 def _forecast_context(forecast_df, actuals_df=None, comparison_value: float | None = None) -> dict:
