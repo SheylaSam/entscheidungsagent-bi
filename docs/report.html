@@ -494,14 +494,15 @@ if pd.Timestamp(end_date) &lt; last_month_end:
 
 <pre><code>from prophet import Prophet
 
-model = Prophet(yearly_seasonality=2, weekly_seasonality=False, daily_seasonality=False)
+yearly = 2 if len(series) &gt;= 12 else False
+model = Prophet(yearly_seasonality=yearly, weekly_seasonality=False, daily_seasonality=False)
 model.fit(series)
 future = model.make_future_dataframe(periods=3, freq='MS')
 forecast = model.predict(future)</code></pre>
 
-<p>Der Parameter <code>yearly_seasonality=2</code> entspricht einem Fourier-Order von 2 (4 Parameter für die Saisonkomponente). Gegenüber dem Default-Wert von 10 reduziert dies das Overfitting-Risiko bei einer kurzen Trainingsserie von rund 24 Monaten erheblich.</p>
+<p>Die Jahres-Saisonalität wird erst ab mindestens 12 vollständigen Monatswerten aktiviert. Darunter modelliert Prophet nur den Trend, weil eine unvollständige Jahresperiode keine belastbare Saisonalität erkennen lässt. Wenn genügend Historie vorhanden ist, entspricht <code>yearly_seasonality=2</code> einem Fourier-Order von 2 (4 Parameter für die Saisonkomponente) und reduziert gegenüber dem Default-Wert von 10 das Overfitting-Risiko.</p>
 
-<p>Das Modell gibt für jeden Monat drei Werte zurück: <code>yhat</code> (Punktprognose), <code>yhat_lower</code> und <code>yhat_upper</code> (80%-Konfidenzintervall). Im Dashboard werden historische Werte als durchgezogene Linie und die Prognosewerte als gestrichelte Linie mit schraffiertem Konfidenzband dargestellt.</p>
+<p>Das Modell gibt für jeden Monat drei Werte zurück: <code>yhat</code> (Punktprognose), <code>yhat_lower</code> und <code>yhat_upper</code> (80%-Konfidenzintervall). Im Dashboard werden historische Werte und Forecast-Werte als Balken dargestellt; Fehlerbalken zeigen die Unsicherheit. Die prozentuale Forecast-Aussage bezieht sich wahlweise auf den letzten vollständigen Ist-Monat oder auf den Durchschnitt der letzten drei vollständigen Ist-Monate.</p>
 
 <h3>Bekannte Modellgrenzen</h3>
 
@@ -665,7 +666,7 @@ forecast['yhat_lower'] = forecast['yhat_lower'].clip(lower=0)</code></pre>
   </tr>
   <tr>
     <td><strong>2 — Forecast</strong></td>
-    <td>Historischer Monatsumsatz als Linie, Prophet-Prognose mit Konfidenzband, 3 Forecast-Metriken als Kacheln</td>
+    <td>Forecast-Interpretation, 3-Monats-Ausblick, wählbare Vergleichsbasis, Unsicherheitsband und Backtest-Modellgüte</td>
     <td>Vertrieb, Controlling</td>
   </tr>
   <tr>
@@ -716,7 +717,7 @@ for rec in recommendations:
 <div class="chapter">
 <h1>Testing und Qualitätssicherung</h1>
 
-<p>Das Projekt verwendet pytest für automatisierte Qualitätssicherung. Alle Analyse- und Agentenmodule haben dedizierte Testdateien. Insgesamt sind 42 Tests implementiert, die vollständig auf synthetischen Daten laufen — keine echte Datenbank oder Excel-Datei nötig.</p>
+<p>Das Projekt verwendet pytest für automatisierte Qualitätssicherung. Alle Analyse- und Agentenmodule haben dedizierte Testdateien. Insgesamt sind 45 Tests implementiert, die vollständig auf synthetischen Daten laufen — keine echte Datenbank oder Excel-Datei nötig.</p>
 
 <h2>Testübersicht</h2>
 
@@ -724,24 +725,24 @@ for rec in recommendations:
   <tr><th>Testdatei</th><th>Anzahl Tests</th><th>Abgedeckte Fälle</th></tr>
   <tr><td><code>tests/test_data_processing.py</code></td><td>6</td><td>Bereinigung, Stornierungen, fehlende IDs, Revenue-Berechnung, DB-Schreiben/Lesen</td></tr>
   <tr><td><code>tests/test_rfm_analysis.py</code></td><td>7</td><td>RFM-Berechnung, Segmentzuweisung (Champions, At Risk, Lost, New, Loyal, Others), Scoring bei kleinen Datenmengen</td></tr>
-  <tr><td><code>tests/test_forecasting.py</code></td><td>5</td><td>Prophet-Forecast Ausgabestruktur, Prognosehorizont, Backtest-Metriken, Grenzfall mit zu wenigen Daten</td></tr>
-  <tr><td><code>tests/test_product_analysis.py</code></td><td>5</td><td>Top-N-Selektion, rückläufige Produkte (3-Monats-Regel), Sonderpositionsfilter, Grenzfälle</td></tr>
+  <tr><td><code>tests/test_forecasting.py</code></td><td>6</td><td>Prophet-Forecast Ausgabestruktur, Prognosehorizont, Backtest-Metriken, Mindest-Trainingshistorie, Grenzfall mit zu wenigen Daten</td></tr>
+  <tr><td><code>tests/test_product_analysis.py</code></td><td>6</td><td>Top-N-Selektion, rückläufige Produkte (3-Monats-Regel), Sonderpositionsfilter, Mindestumsatzfilter, Grenzfälle</td></tr>
   <tr><td><code>tests/test_customer_analysis.py</code></td><td>2</td><td>Hauptland pro Kunde, länderbasierte Segmentauswertung ohne Doppelzählung</td></tr>
-  <tr><td><code>tests/test_decision_agent.py</code></td><td>17</td><td>Regeln 1–6, Schwellwerte, dünne Datenbasis, negativer Forecast, erster zukünftiger Forecast-Monat, Empfehlungsformat</td></tr>
-  <tr><td><strong>Total</strong></td><td><strong>42</strong></td><td></td></tr>
+  <tr><td><code>tests/test_decision_agent.py</code></td><td>18</td><td>Regeln 1–6, Schwellwerte, wählbare Vergleichsbasis, dünne Datenbasis, negativer Forecast, erster zukünftiger Forecast-Monat, Empfehlungsformat</td></tr>
+  <tr><td><strong>Total</strong></td><td><strong>45</strong></td><td></td></tr>
 </table>
 
 <h2>Testausführung</h2>
 
 <pre><code>$ pytest tests/ -v
 ======================== test session starts =========================
-tests/test_customer_analysis.py ..                             [  2/42]
-tests/test_data_processing.py ......                           [  8/42]
-tests/test_decision_agent.py .................                 [ 25/42]
-tests/test_forecasting.py .....                                [ 30/42]
-tests/test_product_analysis.py .....                           [ 35/42]
-tests/test_rfm_analysis.py .......                             [ 42/42]
-======================== 42 passed in 10.09s =========================</code></pre>
+tests/test_customer_analysis.py ..                             [  2/45]
+tests/test_data_processing.py ......                           [  8/45]
+tests/test_decision_agent.py ..................                [ 26/45]
+tests/test_forecasting.py ......                               [ 32/45]
+tests/test_product_analysis.py ......                          [ 38/45]
+tests/test_rfm_analysis.py .......                             [ 45/45]
+======================== 45 passed in 10.42s =========================</code></pre>
 
 <div class="box box-info">
   <div class="box-title">Design-Entscheid: In-Memory Tests</div>

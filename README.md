@@ -88,10 +88,10 @@ data_processing.py  ──►  SQLite (.db)
 | Tab | Inhalt |
 |---|---|
 | Ubersicht | KPI-Metriken (Gesamtumsatz, aktive Kunden, At-Risk-Kunden, Forecast); Umsatz-Trend-Balkendiagramm; Kundensegmente-Übersicht; Top-KI-Empfehlung |
-| Forecast | Prophet-Prognose mit historischem Monatsumsatz und 3-Monats-Forecast inkl. Konfidenzintervall; Metric-Cards fur die drei Forecastmonate |
+| Forecast | 3-Monats-Ausblick mit Forecast-Interpretation, wählbarer Vergleichsbasis, Unsicherheitsband und Backtest-Modellgüte |
 | Kunden RFM | RFM-Scatter-Plot (Recency vs. Frequency, Grösse = Monetary); Segmenttabelle mit Anzahl und Umsatz; Top 10 At-Risk-Kunden |
 | Produkte | Top-10-Produkte nach Umsatz (ohne Versand/Gebühren/Korrekturen); Liste signifikant rückläufiger Produkte (≥3 Monate Rückgang + letzter Monat <50% Durchschnitt); Produkt-Drilldown |
-| KI-Entscheid | Alle Empfehlungen des Entscheidungsagenten mit Befund, Entscheid und Begründung; Live-Regelstatus; anpassbare Schwellwerte für Regel 1 |
+| KI-Entscheid | Alle Empfehlungen des Entscheidungsagenten mit Befund, Entscheid und Begründung; Live-Regelstatus; Agentic Trace; Guardrails; Human-in-the-Loop-Freigabe; Session-Memory; JSON-Export; anpassbare Schwellwerte für Regel 1 |
 
 ---
 
@@ -112,6 +112,13 @@ Die Regeln werden sequenziell geprüft; mehrere Empfehlungen (z.B. Regel 1 + 2 +
 
 Die Standard-Schwellwerte sind im Code als `AgentThresholds` dokumentiert. Regel 1 kann im Dashboard live angepasst werden; die übrigen Regeln bleiben bewusst deterministisch, damit Empfehlungen reproduzierbar und auditierbar bleiben.
 
+Zusätzlich erzeugt `generate_agent_run()` einen auditierbaren Agentenlauf mit:
+
+- **Agentic Trace**: Planung, KPI-Semantik, Datenqualitätsprüfung, Forecast-Bewertung, Risikoanalyse und Synthese.
+- **Evidence Layer**: strukturierte Kennzahlen wie Vergleichsumsatz, Forecast-Abweichung, At-Risk-Anteil, rückläufige Produkte und Top-20-Umsatzanteil.
+- **Guardrails**: Mindestdatenbasis, Forecast-Plausibilität, vorhandene Zukunftsmonate und Human-in-the-Loop-Pflicht.
+- **Memory / Entscheidungslog**: Management-Entscheide können in der Streamlit-Session protokolliert und als JSON exportiert werden.
+
 ---
 
 ## Qualitätssicherung
@@ -120,7 +127,7 @@ Die Standard-Schwellwerte sind im Code als `AgentThresholds` dokumentiert. Regel
 pytest -q
 ```
 
-Aktueller Stand: **42 Tests** für Datenbereinigung, RFM, Forecasting, Produktfilter, Länderlogik und Entscheidungsregeln.
+Aktueller Stand: **48 Tests** für Datenbereinigung, RFM, Forecasting, Produktfilter, Länderlogik, Entscheidungsregeln und Agent-Run-Metadaten.
 
 ---
 

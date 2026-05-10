@@ -37,3 +37,8 @@ def test_backtest_returns_none_for_insufficient_data():
     short = pd.DataFrame({'ds': pd.date_range('2010-01-01', periods=4, freq='MS'), 'y': range(4)})
     result = run_backtest(short, holdout_months=3)
     assert result is None
+
+def test_backtest_requires_six_training_months():
+    short = pd.DataFrame({'ds': pd.date_range('2010-01-01', periods=8, freq='MS'), 'y': range(8)})
+    result = run_backtest(short, holdout_months=3)
+    assert result is None

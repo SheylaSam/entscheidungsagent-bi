@@ -17,6 +17,11 @@ except ValueError:
 from prophet import Prophet
 
 
+def _make_model(series_length: int) -> Prophet:
+    yearly = 2 if series_length >= 12 else False
+    return Prophet(yearly_seasonality=yearly, weekly_seasonality=False, daily_seasonality=False)
+
+
 def prepare_monthly_series(
     conn: sqlite3.Connection,
     start_date: str,
@@ -47,9 +52,9 @@ def prepare_monthly_series(
 
 
 def forecast_revenue(series: pd.DataFrame, periods: int = 3) -> pd.DataFrame:
-    # yearly_seasonality=2 → fourier_order=2 (4 params) instead of default 10 (20 params)
-    # prevents overfitting on short series (~24 monthly data points)
-    model = Prophet(yearly_seasonality=2, weekly_seasonality=False, daily_seasonality=False)
+    # Use yearly seasonality only when enough monthly history exists.
+    # With <12 months Prophet would otherwise infer seasonality from an incomplete year.
+    model = _make_model(len(series))
     model.fit(series)
     future = model.make_future_dataframe(periods=periods, freq='MS')
     forecast = model.predict(future)
@@ -76,11 +81,12 @@ def load_forecast(
 
 def run_backtest(series: pd.DataFrame, holdout_months: int = 3) -> dict | None:
     """Train on all-but-last N months, forecast N months, return metrics."""
-    if len(series) <= holdout_months + 2:
+    min_train_months = 6
+    if len(series) < holdout_months + min_train_months:
         return None
     train = series.iloc[:-holdout_months].copy()
     test = series.iloc[-holdout_months:].copy().reset_index(drop=True)
-    model = Prophet(yearly_seasonality=2, weekly_seasonality=False, daily_seasonality=False)
+    model = _make_model(len(train))
     model.fit(train)
     future = model.make_future_dataframe(periods=holdout_months, freq='MS')
     fc = model.predict(future)

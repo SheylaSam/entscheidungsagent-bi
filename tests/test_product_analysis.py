@@ -1,5 +1,6 @@
+import sqlite3
 import pandas as pd
-from src.product_analysis import get_top_products, get_declining_products, filter_product_rows
+from src.product_analysis import get_top_products, get_declining_products, filter_product_rows, load_product_analysis
 
 
 def make_monthly_product_df():
@@ -52,3 +53,28 @@ def test_filter_product_rows_removes_non_product_entries():
     })
     result = filter_product_rows(df)
     assert result['stock_code'].tolist() == ['85123A']
+
+
+def test_load_product_analysis_respects_top_n_and_min_revenue():
+    conn = sqlite3.connect(':memory:')
+    df = pd.DataFrame({
+        'stock_code': ['A', 'B', 'C'],
+        'description': ['Widget A', 'Widget B', 'Widget C'],
+        'invoice_date': ['2011-01-15', '2011-01-15', '2011-01-15'],
+        'revenue': [500.0, 300.0, 50.0],
+        'country': ['United Kingdom', 'United Kingdom', 'United Kingdom'],
+    })
+    df.to_sql('transactions', conn, index=False)
+    try:
+        top, declining = load_product_analysis(
+            conn,
+            '2011-01-01',
+            '2011-01-31',
+            ('United Kingdom',),
+            top_n=1,
+            min_revenue=100,
+        )
+    finally:
+        conn.close()
+    assert top['stock_code'].tolist() == ['A']
+    assert 'C' not in top['stock_code'].values

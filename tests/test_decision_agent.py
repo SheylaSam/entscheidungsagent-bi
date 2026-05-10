@@ -1,5 +1,5 @@
 import pandas as pd
-from src.decision_agent import AgentThresholds, generate_recommendations
+from src.decision_agent import AgentThresholds, generate_agent_run, generate_recommendations
 
 def make_forecast_decline():
     return pd.DataFrame({'ds': pd.date_range('2010-01-01', periods=6, freq='MS'), 'yhat': [1000, 1000, 1000, 850, 900, 950]})
@@ -64,6 +64,16 @@ def test_rule1_does_not_trigger_on_stable_forecast():
 def test_rule1_uses_first_future_month_not_last_future_month():
     recs = generate_recommendations(make_forecast_stable(), make_rfm_high_at_risk(), make_no_declining(), actuals_df=make_actuals())
     assert 'HOCH' not in [r['priority'] for r in recs]
+
+def test_rule1_can_use_custom_comparison_value():
+    recs = generate_recommendations(
+        make_forecast_stable(),
+        make_rfm_high_at_risk(),
+        make_no_declining(),
+        actuals_df=make_actuals(),
+        comparison_value=1200,
+    )
+    assert 'HOCH' in [r['priority'] for r in recs]
 
 # ── Rule 2 ────────────────────────────────────────────────────────────────────
 
@@ -141,3 +151,38 @@ def test_agent_thresholds_document_rule_defaults():
     assert thresholds.at_risk_share == 0.20
     assert thresholds.declining_product_share == 0.50
     assert thresholds.top_customer_revenue_share == 0.80
+
+
+def test_generate_agent_run_contains_trace_evidence_and_guardrails():
+    run = generate_agent_run(
+        make_forecast_decline(),
+        make_rfm_high_at_risk(),
+        make_declining_products(),
+        actuals_df=make_actuals(),
+    )
+    assert run['agent_type'] == 'Regelbasierter BI-Agent mit Human-in-the-Loop'
+    assert len(run['recommendations']) >= 1
+    assert len(run['trace']) >= 6
+    assert {'baseline_revenue', 'next_forecast', 'at_risk_share'}.issubset(run['evidence'])
+    assert any(g['name'] == 'Human-in-the-Loop' for g in run['guardrails'])
+
+
+def test_generate_agent_run_requires_approval_for_medium_or_high_recommendation():
+    run = generate_agent_run(
+        make_forecast_stable(),
+        make_rfm_low_at_risk(),
+        make_declining_products(),
+        actuals_df=make_actuals(),
+    )
+    assert run['approval_required'] is True
+
+
+def test_generate_agent_run_marks_human_approval_optional_for_low_priority():
+    run = generate_agent_run(
+        make_forecast_stable(),
+        make_rfm_high_champions(),
+        make_no_declining(),
+        actuals_df=make_actuals(),
+    )
+    assert run['recommendations'][0]['priority'] == 'TIEF'
+    assert run['approval_required'] is False

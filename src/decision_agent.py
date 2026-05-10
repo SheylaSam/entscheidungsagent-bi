@@ -1,5 +1,6 @@
 import pandas as pd
 from dataclasses import dataclass
+from datetime import datetime
 
 
 @dataclass(frozen=True)
@@ -12,6 +13,184 @@ class AgentThresholds:
     top_customer_revenue_share: float = 0.80
 
 
+def _forecast_context(forecast_df, actuals_df=None, comparison_value: float | None = None) -> dict:
+    if actuals_df is not None and not actuals_df.empty:
+        baseline = comparison_value if comparison_value is not None else actuals_df['y'].iloc[-1]
+        future = forecast_df[forecast_df['ds'] > actuals_df['ds'].max()]
+        next_forecast = None if future.empty else future['yhat'].iloc[0]
+    else:
+        history = forecast_df.iloc[:-3] if len(forecast_df) > 3 else forecast_df.iloc[:-1]
+        future = forecast_df.tail(3) if len(forecast_df) > 3 else forecast_df.tail(1)
+        baseline = None if history.empty else history['yhat'].iloc[-1]
+        next_forecast = None if future.empty else future['yhat'].iloc[0]
+
+    pct_change = None
+    if baseline is not None and baseline > 0 and next_forecast is not None:
+        pct_change = (next_forecast - baseline) / baseline
+
+    return {
+        'baseline': baseline,
+        'next_forecast': next_forecast,
+        'pct_change': pct_change,
+        'future_months': len(future),
+    }
+
+
+def build_agent_run(
+    forecast_df,
+    rfm_df,
+    declining_df,
+    recommendations: list[dict],
+    forecast_threshold: float = -0.05,
+    at_risk_threshold: float = 0.20,
+    actuals_df=None,
+    comparison_value: float | None = None,
+) -> dict:
+    """Return an auditable agent run around the deterministic recommendation logic."""
+    thresholds = AgentThresholds(
+        forecast_decline=forecast_threshold,
+        at_risk_share=at_risk_threshold,
+    )
+    forecast_ctx = _forecast_context(forecast_df, actuals_df, comparison_value)
+    customer_count = len(rfm_df)
+    actual_months = 0 if actuals_df is None else len(actuals_df)
+    at_risk_count = (rfm_df['segment'] == 'At Risk').sum() if customer_count else 0
+    at_risk_share = at_risk_count / customer_count if customer_count else 0
+    champion_share = (rfm_df['segment'] == 'Champions').sum() / customer_count if customer_count else 0
+    new_share = (rfm_df['segment'] == 'New').sum() / customer_count if customer_count else 0
+    if len(rfm_df) >= 5 and rfm_df['monetary'].sum() > 0:
+        top_n = max(1, int(len(rfm_df) * 0.2))
+        top20_share = rfm_df['monetary'].sort_values(ascending=False).head(top_n).sum() / rfm_df['monetary'].sum()
+    else:
+        top20_share = 0
+
+    if 'revenue_avg' in declining_df.columns and len(declining_df) > 0:
+        significant_declining = declining_df[
+            declining_df['revenue_last_month']
+            < declining_df['revenue_avg'] * thresholds.declining_product_share
+        ]
+    else:
+        significant_declining = declining_df
+
+    guardrails = [
+        {
+            'name': 'Mindestdatenbasis Kunden',
+            'status': 'pass' if customer_count >= 10 else 'warn',
+            'detail': f'{customer_count} Kunden im aktuellen Filter',
+        },
+        {
+            'name': 'Forecast-Zukunftsmonat vorhanden',
+            'status': 'pass' if forecast_ctx['next_forecast'] is not None else 'fail',
+            'detail': f"{forecast_ctx['future_months']} zukünftige Forecast-Monate",
+        },
+        {
+            'name': 'Forecast nicht negativ',
+            'status': 'pass' if (forecast_ctx['next_forecast'] is None or forecast_ctx['next_forecast'] >= 0) else 'warn',
+            'detail': 'Negative Umsatzprognosen werden als nicht plausibel markiert',
+        },
+        {
+            'name': 'Human-in-the-Loop',
+            'status': 'required' if recommendations and recommendations[0]['priority'] in {'HOCH', 'MITTEL'} else 'optional',
+            'detail': 'Management-Freigabe vor operativer Umsetzung',
+        },
+    ]
+
+    evidence = {
+        'baseline_revenue': forecast_ctx['baseline'],
+        'next_forecast': forecast_ctx['next_forecast'],
+        'forecast_change': forecast_ctx['pct_change'],
+        'customer_count': customer_count,
+        'actual_months': actual_months,
+        'at_risk_count': at_risk_count,
+        'at_risk_share': at_risk_share,
+        'champion_share': champion_share,
+        'new_customer_share': new_share,
+        'significant_declining_products': len(significant_declining),
+        'top20_revenue_share': top20_share,
+    }
+
+    trace = [
+        {
+            'step': 1,
+            'name': 'Ziel interpretieren',
+            'tool': 'Planner',
+            'output': 'Management-Risiken erkennen und priorisierte Entscheidungsvorlage erstellen.',
+        },
+        {
+            'step': 2,
+            'name': 'KPI-Semantik laden',
+            'tool': 'Semantic Layer',
+            'output': 'Umsatz, Forecast, At-Risk, Champions, Neukunden und Produktumsatz konsistent definiert.',
+        },
+        {
+            'step': 3,
+            'name': 'Datenqualitaet pruefen',
+            'tool': 'Guardrails',
+            'output': f'{customer_count} Kunden, {actual_months} Ist-Monate, {forecast_ctx["future_months"]} Forecast-Monate.',
+        },
+        {
+            'step': 4,
+            'name': 'Forecast-Risiko bewerten',
+            'tool': 'Prophet Forecast',
+            'output': 'Keine belastbare Abweichung berechenbar' if forecast_ctx['pct_change'] is None else f'{forecast_ctx["pct_change"]:+.1%} gegen Vergleichsbasis.',
+        },
+        {
+            'step': 5,
+            'name': 'Kunden- und Produktrisiken pruefen',
+            'tool': 'RFM + Produktanalyse',
+            'output': f'{at_risk_count} At-Risk-Kunden, {len(significant_declining)} signifikant ruecklaeufige Produkte.',
+        },
+        {
+            'step': 6,
+            'name': 'Empfehlung synthetisieren',
+            'tool': 'Decision Layer',
+            'output': recommendations[0]['decision'] if recommendations else 'Keine Empfehlung erzeugt.',
+        },
+    ]
+
+    approval_required = any(g['name'] == 'Human-in-the-Loop' and g['status'] == 'required' for g in guardrails)
+    return {
+        'run_id': datetime.utcnow().strftime('%Y%m%d%H%M%S'),
+        'goal': 'Priorisierte BI-Entscheidung fuer Management vorbereiten',
+        'agent_type': 'Regelbasierter BI-Agent mit Human-in-the-Loop',
+        'recommendations': recommendations,
+        'evidence': evidence,
+        'trace': trace,
+        'guardrails': guardrails,
+        'approval_required': approval_required,
+    }
+
+
+def generate_agent_run(
+    forecast_df,
+    rfm_df,
+    declining_df,
+    forecast_threshold: float = -0.05,
+    at_risk_threshold: float = 0.20,
+    actuals_df=None,
+    comparison_value: float | None = None,
+) -> dict:
+    recommendations = generate_recommendations(
+        forecast_df,
+        rfm_df,
+        declining_df,
+        forecast_threshold,
+        at_risk_threshold,
+        actuals_df,
+        comparison_value,
+    )
+    return build_agent_run(
+        forecast_df,
+        rfm_df,
+        declining_df,
+        recommendations,
+        forecast_threshold,
+        at_risk_threshold,
+        actuals_df,
+        comparison_value,
+    )
+
+
 def generate_recommendations(
     forecast_df,
     rfm_df,
@@ -19,6 +198,7 @@ def generate_recommendations(
     forecast_threshold: float = -0.05,
     at_risk_threshold: float = 0.20,
     actuals_df=None,
+    comparison_value: float | None = None,
 ):
     thresholds = AgentThresholds(
         forecast_decline=forecast_threshold,
@@ -36,7 +216,7 @@ def generate_recommendations(
         return recommendations
 
     if actuals_df is not None and not actuals_df.empty:
-        last_actual = actuals_df['y'].iloc[-1]
+        last_actual = comparison_value if comparison_value is not None else actuals_df['y'].iloc[-1]
         future = forecast_df[forecast_df['ds'] > actuals_df['ds'].max()]
         if future.empty:
             return recommendations

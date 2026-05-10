@@ -2,15 +2,120 @@ import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
+import json
 from datetime import date
 from src.data_processing import build_database, get_connection, DB_PATH
 from src.rfm_analysis import load_rfm
 from src.forecasting import load_forecast, run_backtest
 from src.product_analysis import load_product_analysis
 from src.customer_analysis import load_primary_customer_country, summarize_segments_by_country
-from src.decision_agent import generate_recommendations
+from src.decision_agent import generate_recommendations, generate_agent_run
 
 st.set_page_config(page_title="RetailBI — Entscheidungsagent", layout="wide")
+
+st.markdown("""
+<style>
+    .block-container { padding-top: 2rem; }
+    [data-testid="stMetric"] {
+        background: #0f172a;
+        border: 1px solid #1e293b;
+        border-radius: 8px;
+        padding: 14px 16px;
+    }
+    [data-testid="stMetricLabel"] { color: #94a3b8; }
+    .decision-panel {
+        background: #0f172a;
+        border: 1px solid #1e293b;
+        border-left: 5px solid var(--accent);
+        border-radius: 8px;
+        padding: 20px 22px;
+        margin: 8px 0 18px;
+    }
+    .decision-kicker {
+        color: #94a3b8;
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+    }
+    .decision-title {
+        color: #f8fafc;
+        font-size: 24px;
+        font-weight: 750;
+        line-height: 1.25;
+        margin-bottom: 10px;
+    }
+    .decision-body {
+        color: #cbd5e1;
+        font-size: 15px;
+        line-height: 1.5;
+        margin-bottom: 6px;
+    }
+    .evidence-strip {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+        margin: 10px 0 20px;
+    }
+    .evidence-item {
+        background: #111827;
+        border: 1px solid #1f2937;
+        border-radius: 8px;
+        padding: 12px 14px;
+    }
+    .evidence-label {
+        color: #94a3b8;
+        font-size: 12px;
+        font-weight: 650;
+        margin-bottom: 4px;
+    }
+    .evidence-value {
+        color: #f8fafc;
+        font-size: 18px;
+        font-weight: 750;
+    }
+    .section-kicker {
+        color: #64748b;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: .05em;
+        text-transform: uppercase;
+        margin-top: 18px;
+    }
+    .action-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 10px;
+        margin: 0 0 20px;
+    }
+    .action-item {
+        background: #111827;
+        border: 1px solid #1f2937;
+        border-left: 4px solid var(--accent);
+        border-radius: 8px;
+        padding: 12px 14px;
+        color: #e5e7eb;
+        font-size: 14px;
+        line-height: 1.35;
+    }
+    .action-priority {
+        color: #94a3b8;
+        font-size: 11px;
+        font-weight: 750;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        margin-bottom: 4px;
+    }
+    @media (max-width: 900px) {
+        .evidence-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 520px) {
+        .evidence-strip { grid-template-columns: 1fr; }
+        .decision-title { font-size: 20px; }
+    }
+</style>
+""", unsafe_allow_html=True)
 
 if not DB_PATH.exists():
     with st.spinner("Datenbankimport läuft — das dauert beim ersten Start ca. 30–90 Sekunden..."):
@@ -21,26 +126,36 @@ else:
 # ── Sidebar: Zeitraum-Filter ──────────────────────────────────────────────────
 _MIN_DATE = date(2009, 12, 1)
 _MAX_DATE = date(2011, 12, 9)
+_DEFAULT_START = date(2011, 6, 1)
 
 st.sidebar.header("Zeitraum")
-date_range = st.sidebar.date_input(
+date_range = st.sidebar.slider(
     "Datumsbereich",
-    value=(_MIN_DATE, _MAX_DATE),
     min_value=_MIN_DATE,
     max_value=_MAX_DATE,
+    value=(_DEFAULT_START, _MAX_DATE),
     format="DD/MM/YYYY",
 )
 
-if len(date_range) != 2:
-    st.stop()
-
 start_date, end_date = date_range
 
-if (end_date - start_date).days < 62:
-    st.warning("Bitte mindestens 2 Monate auswählen, damit der Forecast berechnet werden kann.")
+if (end_date - start_date).days < 180:
+    st.warning("Bitte mindestens 6 Monate auswählen, damit der Forecast aussagekräftig berechnet werden kann.")
     st.stop()
 st.sidebar.caption(
     f"{start_date.strftime('%d.%m.%Y')} – {end_date.strftime('%d.%m.%Y')}"
+)
+st.sidebar.divider()
+
+st.sidebar.header("Forecast")
+forecast_baseline_mode = st.sidebar.radio(
+    "Vergleichsbasis",
+    options=[
+        "Letzter vollständiger Monat",
+        "Durchschnitt letzte 3 Monate",
+    ],
+    index=1,
+    help="Bestimmt, worauf sich die Forecast-Prozentänderung bezieht.",
 )
 st.sidebar.divider()
 
@@ -57,14 +172,46 @@ def get_countries() -> list[str]:
 
 all_countries = get_countries()
 
-st.sidebar.header("Länder")
-selected_countries = st.sidebar.multiselect(
-    "Länder (leer = alle)",
-    options=all_countries,
-    default=[],
-    placeholder="Alle Länder…",
+st.sidebar.header("Markt")
+market_focus = st.sidebar.radio(
+    "Markt-Fokus",
+    options=["Alle", "Nur UK", "Ohne UK", "Manuell"],
+    index=0,
+    help="UK dominiert den Datensatz stark. Der Fokus hilft, internationale Muster sichtbar zu machen.",
 )
-countries_tuple = tuple(all_countries) if not selected_countries else tuple(selected_countries)
+
+if market_focus == "Nur UK":
+    countries_tuple = ("United Kingdom",)
+elif market_focus == "Ohne UK":
+    countries_tuple = tuple(country for country in all_countries if country != "United Kingdom")
+elif market_focus == "Manuell":
+    selected_countries = st.sidebar.multiselect(
+        "Länder",
+        options=all_countries,
+        default=[],
+        placeholder="Länder auswählen…",
+    )
+    if not selected_countries:
+        st.sidebar.warning("Bitte mindestens ein Land auswählen.")
+        st.stop()
+    countries_tuple = tuple(selected_countries)
+else:
+    countries_tuple = tuple(all_countries)
+st.sidebar.divider()
+
+st.sidebar.header("Produkte")
+top_n_products = st.sidebar.select_slider(
+    "Top-N Produkte",
+    options=[5, 10, 15, 20],
+    value=10,
+)
+min_product_revenue = st.sidebar.number_input(
+    "Mindestumsatz Produkt (£)",
+    min_value=0,
+    value=100,
+    step=100,
+    help="Blendet kleine Produktpositionen aus Top-Produkten und Rückgangsliste aus.",
+)
 st.sidebar.divider()
 
 
@@ -80,12 +227,27 @@ def load_backtest(start_date: str, end_date: str, countries: tuple) -> dict | No
 
 
 @st.cache_data
-def load_all(start_date: str, end_date: str, countries: tuple, declining_months: int = 3):
+def load_all(
+    start_date: str,
+    end_date: str,
+    countries: tuple,
+    declining_months: int = 3,
+    top_n: int = 10,
+    min_product_revenue: float = 0,
+):
     conn = get_connection()
     try:
         rfm = load_rfm(conn, start_date, end_date, countries)
         actuals, forecast = load_forecast(conn, start_date, end_date, countries)
-        top_products, declining = load_product_analysis(conn, start_date, end_date, countries, declining_months)
+        top_products, declining = load_product_analysis(
+            conn,
+            start_date,
+            end_date,
+            countries,
+            declining_months,
+            top_n,
+            min_product_revenue,
+        )
     finally:
         conn.close()
     return rfm, actuals, forecast, top_products, declining
@@ -143,7 +305,12 @@ def load_revenue_by_country(start_date: str, end_date: str, countries: tuple) ->
 
 
 rfm, actuals, forecast, top_products, declining = load_all(
-    start_date.isoformat(), end_date.isoformat(), countries_tuple, 3
+    start_date.isoformat(),
+    end_date.isoformat(),
+    countries_tuple,
+    3,
+    top_n_products,
+    min_product_revenue,
 )
 monthly_product_df = load_monthly_product(
     start_date.isoformat(), end_date.isoformat(), countries_tuple
@@ -155,84 +322,155 @@ revenue_by_country_df = load_revenue_by_country(
     start_date.isoformat(), end_date.isoformat(), countries_tuple
 )
 backtest = load_backtest(start_date.isoformat(), end_date.isoformat(), countries_tuple)
-recs = generate_recommendations(forecast, rfm, declining, actuals_df=actuals)
+if len(actuals) < 6:
+    st.warning("Der gewählte Zeitraum enthält weniger als 6 vollständige Umsatzmonate. Bitte Zeitraum erweitern.")
+    st.stop()
+agent_forecast_base = (
+    actuals.tail(3)['y'].mean()
+    if forecast_baseline_mode == "Durchschnitt letzte 3 Monate" and len(actuals) >= 3
+    else actuals['y'].iloc[-1]
+)
+recs = generate_recommendations(
+    forecast,
+    rfm,
+    declining,
+    actuals_df=actuals,
+    comparison_value=agent_forecast_base,
+)
+
+
+def priority_meta(priority: str) -> dict:
+    return {
+        'HOCH': {'accent': '#ef4444', 'label': 'Hohe Priorität'},
+        'MITTEL': {'accent': '#f59e0b', 'label': 'Mittlere Priorität'},
+        'TIEF': {'accent': '#22c55e', 'label': 'Tiefe Priorität'},
+    }.get(priority, {'accent': '#94a3b8', 'label': priority})
+
+
+def render_decision_panel(rec: dict, eyebrow: str = "Management-Entscheid") -> None:
+    meta = priority_meta(rec['priority'])
+    st.markdown(f"""
+    <div class="decision-panel" style="--accent:{meta['accent']}">
+        <div class="decision-kicker">{eyebrow} · {meta['label']}</div>
+        <div class="decision-title">{rec['decision']}</div>
+        <div class="decision-body"><strong>Befund:</strong> {rec['finding']}</div>
+        <div class="decision-body"><strong>Begründung:</strong> {rec['reasoning']}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def render_evidence_strip(items: list[tuple[str, str]]) -> None:
+    cells = ''.join(
+        f'<div class="evidence-item"><div class="evidence-label">{label}</div>'
+        f'<div class="evidence-value">{value}</div></div>'
+        for label, value in items
+    )
+    st.markdown(f'<div class="evidence-strip">{cells}</div>', unsafe_allow_html=True)
+
+
+def render_action_list(recommendations: list[dict]) -> None:
+    if not recommendations:
+        return
+    cards = ''
+    for rec in recommendations:
+        meta = priority_meta(rec['priority'])
+        cards += (
+            f'<div class="action-item" style="--accent:{meta["accent"]}">'
+            f'<div class="action-priority">{meta["label"]}</div>'
+            f'<div>{rec["decision"]}</div>'
+            '</div>'
+        )
+    st.markdown(f'<div class="action-list">{cards}</div>', unsafe_allow_html=True)
+
+
+def render_agent_trace(trace: list[dict]) -> None:
+    rows = pd.DataFrame(trace)
+    rows = rows.rename(columns={
+        'step': 'Schritt',
+        'name': 'Agentenaktion',
+        'tool': 'Tool / Layer',
+        'output': 'Output',
+    })
+    st.dataframe(rows[['Schritt', 'Agentenaktion', 'Tool / Layer', 'Output']],
+                 use_container_width=True, hide_index=True)
+
+
+def render_guardrails(guardrails: list[dict]) -> None:
+    display = pd.DataFrame(guardrails).copy()
+    display['status'] = display['status'].map({
+        'pass': 'OK',
+        'warn': 'Warnung',
+        'fail': 'Fehler',
+        'required': 'Freigabe nötig',
+        'optional': 'Optional',
+    }).fillna(display['status'])
+    display = display.rename(columns={'name': 'Guardrail', 'status': 'Status', 'detail': 'Detail'})
+    st.dataframe(display[['Guardrail', 'Status', 'Detail']], use_container_width=True, hide_index=True)
+
+
+def _json_default(value):
+    if hasattr(value, 'isoformat'):
+        return value.isoformat()
+    if hasattr(value, 'item'):
+        return value.item()
+    return str(value)
+
+
+def forecast_baseline(actuals_df: pd.DataFrame, mode: str) -> tuple[float, str]:
+    if mode == "Durchschnitt letzte 3 Monate" and len(actuals_df) >= 3:
+        return actuals_df.tail(3)['y'].mean(), "Ø der letzten 3 vollständigen Ist-Monate"
+    return actuals_df['y'].iloc[-1], "letzter vollständiger Ist-Monat"
+
+
+def short_baseline_label(label: str) -> str:
+    if label.startswith("Ø"):
+        return "Ø letzte 3 Monate"
+    return "Letzter Ist-Monat"
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "📊 Übersicht", "📈 Forecast", "👥 Kunden RFM", "📦 Produkte", "🤖 KI-Entscheid"
+    "Übersicht", "Forecast", "Kunden RFM", "Produkte", "KI-Entscheid"
 ])
 
 # ── Tab 1 ────────────────────────────────────────────────────────────────────
 with tab1:
-    st.title("Online Retail — Business Intelligence Dashboard")
-    st.caption("Datenquelle: Online Retail II (UCI ML Repository, 2009–2011)")
-
-    with st.expander("ℹ️ Wie funktioniert dieses Dashboard?", expanded=False):
-        st.markdown("""
-**Willkommen beim RetailBI Entscheidungsagenten.** Dieses Dashboard analysiert Umsatz, Kunden und Produkte eines britischen Online-Shops (2009–2011) und leitet daraus automatisch Handlungsempfehlungen ab.
-
----
-
-**Sidebar — Filter**
-| Filter | Funktion |
-|---|---|
-| **Datumsbereich** | Alle Tabs zeigen nur Daten im gewählten Zeitraum |
-| **Land** | Filtert auf ein einzelnes Land oder alle Länder |
-
-> Tipp: Mindestens 6 Monate und "Alle Länder" wählen für aussagekräftige Ergebnisse.
-
----
-
-**Die 5 Tabs**
-
-| Tab | Inhalt |
-|---|---|
-| 📊 **Übersicht** | KPI-Kennzahlen, Umsatztrend, Kundensegmente, Top-Empfehlung |
-| 📈 **Forecast** | Prophet-Prognose für die nächsten 3 Monate mit Konfidenzintervall |
-| 👥 **Kunden RFM** | Kundensegmentierung nach Recency, Frequency, Monetary |
-| 📦 **Produkte** | Top-Produkte + rückläufige Produkte — Klick auf Balken zeigt Monatsverlauf |
-| 🤖 **KI-Entscheid** | Empfehlungen des Agenten — Schwellwerte per Slider anpassbar |
-
----
-
-**KI-Entscheidungslogik**
-
-Der Agent kombiniert Forecast, RFM und Produktanalyse und prüft sechs Regeln:
-1. **HOCH** — Forecast fällt stark UND viele At-Risk-Kunden → Reaktivierungskampagne
-2. **MITTEL** — Produkte mit anhaltend sinkendem Umsatz → Sortiment bereinigen
-3. **MITTEL** — Champion-Anteil < 10% → Kundenbindungsprogramm aufbauen
-4. **MITTEL** — Neukunden-Anteil < 5% → Neukundenakquisition ausbauen
-5. **MITTEL** — Top-20%-Kunden >80% des Umsatzes → Klumpenrisiko reduzieren
-6. **TIEF** — Keine Auffälligkeiten → kein Handlungsbedarf
-
-Im Tab 🤖 KI-Entscheid können die Schwellwerte für Regel 1 per Slider angepasst werden.
-        """)
-
-    st.divider()
+    st.title("RetailBI Entscheidungsagent")
+    st.caption("Online Retail II · Management View · 2009–2011")
 
     total_revenue = actuals['y'].sum()
     total_customers = rfm['customer_id'].nunique()
     at_risk_count = (rfm['segment'] == 'At Risk').sum()
-    last_actual = actuals['y'].iloc[-1]
+    at_risk_share = at_risk_count / total_customers if total_customers > 0 else 0
+    forecast_base_value, forecast_base_label = forecast_baseline(actuals, forecast_baseline_mode)
+    forecast_base_short = short_baseline_label(forecast_base_label)
     future_rows = forecast[forecast['ds'] > actuals['ds'].max()]
     if future_rows.empty:
         st.warning("Forecast enthält keine zukünftigen Datenpunkte. Bitte einen längeren Zeitraum wählen.")
         st.stop()
     next_forecast = future_rows['yhat'].iloc[0]
-    forecast_delta = (next_forecast - last_actual) / last_actual
+    forecast_delta = (next_forecast - forecast_base_value) / forecast_base_value
+    top_rec = recs[0]
 
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Gesamtumsatz", f"£{total_revenue:,.0f}")
-    col2.metric("Aktive Kunden", f"{total_customers:,}")
-    col3.metric("At-Risk Kunden", f"{at_risk_count:,}")
-    col4.metric("Forecast nächster Monat", f"£{next_forecast:,.0f}", f"{forecast_delta:+.1%}")
+    render_decision_panel(top_rec)
+    if len(recs) > 1:
+        st.markdown('<div class="section-kicker">Weitere Massnahmen</div>', unsafe_allow_html=True)
+        render_action_list(recs[1:4])
+    render_evidence_strip([
+        ("Umsatz im Zeitraum", f"£{total_revenue:,.0f}"),
+        ("Aktive Kunden", f"{total_customers:,}"),
+        ("At-Risk Anteil", f"{at_risk_share:.1%}"),
+        ("Vergleichsumsatz", f"£{forecast_base_value:,.0f}"),
+        ("Prognose nächster Monat", f"£{next_forecast:,.0f}"),
+        ("Abweichung zur Vergleichsbasis", f"{forecast_delta:+.1%}"),
+    ])
 
-    st.divider()
-    col_left, col_mid, col_right = st.columns(3)
+    st.markdown('<div class="section-kicker">Belege</div>', unsafe_allow_html=True)
+    col_left, col_mid = st.columns([1.35, 1])
 
     with col_left:
-        st.subheader("Umsatz Trend")
+        st.subheader("Umsatztrend")
         fig = px.bar(actuals.tail(12), x='ds', y='y', labels={'ds': '', 'y': 'Umsatz (£)'})
-        fig.update_layout(height=220, margin=dict(t=0, b=0))
+        fig.update_traces(marker_color='#60a5fa')
+        fig.update_layout(height=300, margin=dict(t=10, b=0), showlegend=False)
         st.plotly_chart(fig, use_container_width=True)
 
     with col_mid:
@@ -243,59 +481,130 @@ Im Tab 🤖 KI-Entscheid können die Schwellwerte für Regel 1 per Slider angepa
                      'Lost': '#ef4444', 'New': '#a78bfa', 'Others': '#94a3b8'}
         fig2 = px.bar(seg_counts, x='Anzahl', y='Segment', orientation='h',
                       color='Segment', color_discrete_map=color_map)
-        fig2.update_layout(height=220, margin=dict(t=0, b=0), showlegend=False)
+        fig2.update_layout(height=300, margin=dict(t=10, b=0), showlegend=False)
         st.plotly_chart(fig2, use_container_width=True)
-
-    with col_right:
-        st.subheader("KI-Empfehlung")
-        top_rec = recs[0]
-        icon = {'HOCH': '🔴', 'MITTEL': '🟡', 'TIEF': '🟢'}.get(top_rec['priority'], '⚪')
-        st.markdown(f"**{icon} Priorität: {top_rec['priority']}**")
-        st.markdown(f"_{top_rec['finding']}_")
-        st.markdown(f"**→ {top_rec['decision']}**")
-        st.caption("Details auf Tab 🤖 KI-Entscheid")
 
 # ── Tab 2 ────────────────────────────────────────────────────────────────────
 with tab2:
-    st.title("Umsatz-Forecast")
-    st.caption("Historischer Monatsumsatz + Prophet-Prognose (3 Monate)")
-
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=actuals['ds'], y=actuals['y'],
-        mode='lines+markers', name='Tatsächlicher Umsatz', line=dict(color='#60a5fa', width=2)))
     future_forecast = forecast[forecast['ds'] > actuals['ds'].max()]
-    fig.add_trace(go.Scatter(x=future_forecast['ds'], y=future_forecast['yhat'],
-        mode='lines+markers', name='Forecast', line=dict(color='#a78bfa', width=2, dash='dash')))
-    fig.add_trace(go.Scatter(
-        x=pd.concat([future_forecast['ds'], future_forecast['ds'].iloc[::-1]]),
-        y=pd.concat([future_forecast['yhat_upper'], future_forecast['yhat_lower'].iloc[::-1]]),
-        fill='toself', fillcolor='rgba(167,139,250,0.15)',
-        line=dict(color='rgba(255,255,255,0)'), name='Konfidenzintervall'))
-    fig.update_layout(height=400, xaxis_title='Monat', yaxis_title='Umsatz (£)',
-                      legend=dict(orientation='h', yanchor='bottom', y=1.02))
+    last_actual = actuals['y'].iloc[-1]
+    forecast_base_value, forecast_base_label = forecast_baseline(actuals, forecast_baseline_mode)
+    forecast_base_short = short_baseline_label(forecast_base_label)
+    next_row = future_forecast.iloc[0]
+    next_delta = (next_row['yhat'] - forecast_base_value) / forecast_base_value if forecast_base_value > 0 else 0
+    recent_avg = actuals.tail(3)['y'].mean()
+    forecast_avg = future_forecast['yhat'].mean()
+    avg_delta = (forecast_avg - recent_avg) / recent_avg if recent_avg > 0 else 0
+    uncertainty = (
+        (future_forecast['yhat_upper'] - future_forecast['yhat_lower']) / future_forecast['yhat'].clip(lower=1)
+    ).mean()
+
+    if next_delta <= -0.05:
+        forecast_rec = {
+            'priority': 'HOCH',
+            'decision': 'Umsatzrückgang im nächsten Monat aktiv beobachten.',
+            'finding': f'Prognose £{next_row["yhat"]:,.0f} liegt {next_delta:+.1%} unter dem Vergleichsumsatz (£{forecast_base_value:,.0f}; {forecast_base_label}).',
+            'reasoning': 'Der Agent sollte diesen Forecast zusammen mit Kunden- und Produktindikatoren interpretieren, nicht isoliert.',
+        }
+    elif next_delta >= 0.05:
+        forecast_rec = {
+            'priority': 'TIEF',
+            'decision': 'Kurzfristig positiver Umsatztrend erwartet.',
+            'finding': f'Prognose £{next_row["yhat"]:,.0f} liegt {next_delta:+.1%} über dem Vergleichsumsatz (£{forecast_base_value:,.0f}; {forecast_base_label}).',
+            'reasoning': 'Der Ausblick ist positiv, sollte aber wegen Saisonalität und Unsicherheitsband weiter überwacht werden.',
+        }
+    else:
+        forecast_rec = {
+            'priority': 'MITTEL',
+            'decision': 'Umsatzentwicklung bleibt kurzfristig stabil.',
+            'finding': f'Prognose £{next_row["yhat"]:,.0f} liegt {next_delta:+.1%} nahe am Vergleichsumsatz (£{forecast_base_value:,.0f}; {forecast_base_label}).',
+            'reasoning': 'Bei stabilem Forecast sind Kundensegmente und rückläufige Produkte die wichtigeren Entscheidungstreiber.',
+        }
+
+    st.title("Forecast & Umsatzrisiko")
+    st.caption("3-Monats-Ausblick mit Unsicherheit und Modellgüte")
+    render_decision_panel(forecast_rec, "Forecast-Interpretation")
+    render_evidence_strip([
+        ("Vergleichsumsatz", f"£{forecast_base_value:,.0f}"),
+        ("Prognose nächster Monat", f"£{next_row['yhat']:,.0f}"),
+        ("Abweichung zur Vergleichsbasis", f"{next_delta:+.1%}"),
+        ("Ø Prognose vs. letzte 3 Monate", f"{avg_delta:+.1%}"),
+        ("Ø Unsicherheitsband", f"{uncertainty:.0%}"),
+    ])
+
+    chart_history = actuals.tail(12).copy()
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=chart_history['ds'], y=chart_history['y'],
+        name='Ist-Umsatz', marker_color='#60a5fa',
+        hovertemplate='%{x|%b %Y}<br>Ist: £%{y:,.0f}<extra></extra>',
+    ))
+    fig.add_trace(go.Bar(
+        x=future_forecast['ds'], y=future_forecast['yhat'],
+        name='Forecast', marker_color='#f59e0b',
+        error_y=dict(
+            type='data',
+            array=(future_forecast['yhat_upper'] - future_forecast['yhat']).clip(lower=0),
+            arrayminus=(future_forecast['yhat'] - future_forecast['yhat_lower']).clip(lower=0),
+            color='#fbbf24',
+            thickness=1.5,
+            width=4,
+        ),
+        hovertemplate='%{x|%b %Y}<br>Forecast: £%{y:,.0f}<extra></extra>',
+    ))
+    fig.add_hline(y=forecast_base_value, line_dash='dot', line_color='#94a3b8',
+                  annotation_text='Vergleichsbasis', annotation_position='top left')
+    fig.update_layout(
+        height=430,
+        barmode='group',
+        xaxis_title='',
+        yaxis_title='Umsatz (£)',
+        legend=dict(orientation='h', yanchor='bottom', y=1.02),
+        margin=dict(t=20, b=10),
+    )
     st.plotly_chart(fig, use_container_width=True)
 
-    col1, col2, col3 = st.columns(3)
-    for i, row in enumerate(future_forecast.itertuples()):
-        [col1, col2, col3][i].metric(row.ds.strftime('%b %Y'), f"£{row.yhat:,.0f}",
-            f"£{row.yhat_lower:,.0f} – £{row.yhat_upper:,.0f}")
+    forecast_display = future_forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].copy()
+    forecast_display['Delta zur Vergleichsbasis'] = (
+        (forecast_display['yhat'] - forecast_base_value) / forecast_base_value
+    )
+    forecast_display['Monat'] = forecast_display['ds'].dt.strftime('%b %Y')
+    forecast_display['Forecast'] = forecast_display['yhat'].map('£{:,.0f}'.format)
+    forecast_display['Unsicherheitsband'] = (
+        forecast_display['yhat_lower'].map('£{:,.0f}'.format)
+        + ' – '
+        + forecast_display['yhat_upper'].map('£{:,.0f}'.format)
+    )
+    forecast_display['Delta'] = forecast_display['Delta zur Vergleichsbasis'].map('{:+.1%}'.format)
+    st.dataframe(
+        forecast_display[['Monat', 'Forecast', 'Delta', 'Unsicherheitsband']],
+        use_container_width=True,
+        hide_index=True,
+    )
 
     # ── Backtest / Modellgüte ────────────────────────────────────────────────
     st.divider()
-    st.subheader("Modellgüte — Backtest (letzte 3 Monate)")
-    st.caption("Das Modell wurde auf allen Daten ausser den letzten 3 Monaten trainiert. Die Prognose für diese 3 Monate wird mit den tatsächlichen Werten verglichen.")
+    st.subheader("Kann man dem Forecast trauen?")
 
     if backtest is None:
-        st.info("Zu wenig Daten für einen Backtest (mindestens 6 Monate benötigt).")
+        st.info("Zu wenig vollständige Monatsdaten für einen belastbaren Backtest (mindestens 9 Monate benötigt: 6 Training + 3 Test).")
     else:
-        bc1, bc2, bc3 = st.columns(3)
-        bc1.metric("MAPE", f"{backtest['mape']:.1%}",
-                   help="Mean Absolute Percentage Error — mittlerer prozentualer Fehler")
-        bc2.metric("MAE", f"£{backtest['mae']:,.0f}",
-                   help="Mean Absolute Error — mittlerer absoluter Fehler in Pfund")
+        mape = backtest['mape']
         accuracy = max(0, 1 - backtest['mape'])
-        bc3.metric("Treffergenauigkeit", f"{accuracy:.0%}",
-                   help="1 − MAPE als einfache Näherung der Modellgenauigkeit")
+        quality = "hoch" if mape < 0.15 else "mittel" if mape < 0.30 else "niedrig"
+        q_priority = "TIEF" if quality == "hoch" else "MITTEL" if quality == "mittel" else "HOCH"
+        render_decision_panel({
+            'priority': q_priority,
+            'decision': f'Modellgüte: {quality}.',
+            'finding': f'Der Backtest-Fehler liegt bei {mape:.1%} MAPE und £{backtest["mae"]:,.0f} MAE.',
+            'reasoning': 'Das Modell wurde auf den letzten drei historischen Monaten geprüft. Je tiefer der Fehler, desto belastbarer die Prognose.',
+        }, "Backtest")
+        render_evidence_strip([
+            ("MAPE", f"{mape:.1%}"),
+            ("MAE", f"£{backtest['mae']:,.0f}"),
+            ("Näherungsgenauigkeit", f"{accuracy:.0%}"),
+            ("Holdout", "3 Monate"),
+        ])
 
         fig_bt = go.Figure()
         fig_bt.add_trace(go.Scatter(
@@ -320,7 +629,7 @@ with tab2:
     if 'trend' in forecast.columns:
         st.divider()
         st.subheader("Saisonalitäts-Decomposition")
-        st.caption("Prophet zerlegt den Forecast in einen Langzeit-Trend und saisonale Muster pro Monat.")
+        st.caption("Prophet zerlegt den Forecast in einen Langzeit-Trend. Jahres-Saisonalität wird erst ab 12 vollständigen Monaten modelliert.")
 
         col_trend, col_yearly = st.columns(2)
 
@@ -385,9 +694,16 @@ with tab3:
         summary['Umsatz'] = summary['Umsatz'].map('£{:,.0f}'.format)
         st.dataframe(summary, use_container_width=True, hide_index=True)
 
-        st.subheader("At-Risk Kunden")
-        at_risk = rfm[rfm['segment'] == 'At Risk'][['customer_id', 'recency', 'frequency', 'monetary']].head(10).copy()
+        st.subheader("Top At-Risk Kunden")
+        at_risk = (
+            rfm[rfm['segment'] == 'At Risk']
+            [['customer_id', 'recency', 'frequency', 'monetary']]
+            .sort_values('monetary', ascending=False)
+            .head(10)
+            .copy()
+        )
         at_risk['monetary'] = at_risk['monetary'].map('£{:,.0f}'.format)
+        at_risk.columns = ['Kunde', 'Recency (Tage)', 'Bestellungen', 'Umsatz']
         st.dataframe(at_risk, use_container_width=True, hide_index=True)
 
     st.divider()
@@ -425,18 +741,22 @@ with tab3:
 # ── Tab 4 ────────────────────────────────────────────────────────────────────
 with tab4:
     st.title("Produkt-Performance")
-    st.caption("Top-Produkte nach Umsatz · Rückläufige Produkte (≥3 Monate)")
+    st.caption(f"Top-Produkte nach Umsatz · Rückläufige Produkte · Mindestumsatz £{min_product_revenue:,.0f}")
 
     col_top, col_decline = st.columns(2)
 
     with col_top:
-        st.subheader("Top 10 Produkte")
-        fig = px.bar(top_products, x='revenue', y='description', orientation='h',
-            labels={'revenue': 'Umsatz (£)', 'description': ''},
-            color='revenue', color_continuous_scale='Blues')
-        fig.update_layout(height=380, coloraxis_showscale=False, yaxis={'categoryorder': 'total ascending'})
-        selection = st.plotly_chart(fig, use_container_width=True,
-                                    on_select="rerun", key="top_products_chart")
+        st.subheader(f"Top {top_n_products} Produkte")
+        if top_products.empty:
+            st.info("Keine Produkte erfüllen den gewählten Mindestumsatz.")
+            selection = None
+        else:
+            fig = px.bar(top_products, x='revenue', y='description', orientation='h',
+                labels={'revenue': 'Umsatz (£)', 'description': ''},
+                color='revenue', color_continuous_scale='Blues')
+            fig.update_layout(height=380, coloraxis_showscale=False, yaxis={'categoryorder': 'total ascending'})
+            selection = st.plotly_chart(fig, use_container_width=True,
+                                        on_select="rerun", key="top_products_chart")
 
     with col_decline:
         st.subheader(f"Rückläufige Produkte ({len(declining)})")
@@ -452,7 +772,7 @@ with tab4:
     # Drill-down: show monthly trend for selected product
     selected_product = None
     try:
-        points = selection["selection"]["points"]
+        points = selection["selection"]["points"] if selection is not None else []
         if points:
             selected_product = points[0]["y"]
     except (KeyError, TypeError, IndexError):
@@ -505,31 +825,29 @@ with tab4:
 # ── Tab 5 ────────────────────────────────────────────────────────────────────
 with tab5:
     st.title("KI-Entscheidungsagent")
-    st.caption("Regelbasierter Agent — kombiniert Forecast, RFM und Produktanalyse")
+    st.caption("Priorisierte Managemententscheidung mit nachvollziehbarer Regelbasis")
 
     # ── Sliders ──────────────────────────────────────────────────────────────
-    st.subheader("Schwellwerte anpassen")
-    st.caption("Passe die Grenzwerte für Regel 1 an — die Regelstatus-Anzeige und Empfehlungen aktualisieren sich sofort.")
-    col_s1, col_s2 = st.columns(2)
-    with col_s1:
-        _ft_pct = st.slider(
-            "Forecast-Rückgang (Regel 1)",
-            min_value=-30, max_value=-1, value=-5, step=1,
-            format="%d%%",
-            help="Wie stark muss der Forecast fallen, damit Regel 1 anschlägt?",
-        )
-        forecast_threshold = _ft_pct / 100
-    with col_s2:
-        _ar_pct = st.slider(
-            "At-Risk-Anteil (Regel 1)",
-            min_value=5, max_value=50, value=20, step=1,
-            format="%d%%",
-            help="Wie hoch muss der At-Risk-Anteil sein, damit Regel 1 anschlägt?",
-        )
-        at_risk_threshold = _ar_pct / 100
+    with st.expander("Regelparameter", expanded=False):
+        col_s1, col_s2 = st.columns(2)
+        with col_s1:
+            _ft_pct = st.slider(
+                "Forecast-Rückgang (Regel 1)",
+                min_value=-30, max_value=-1, value=-5, step=1,
+                format="%d%%",
+                help="Wie stark muss der Forecast fallen, damit Regel 1 anschlägt?",
+            )
+            forecast_threshold = _ft_pct / 100
+        with col_s2:
+            _ar_pct = st.slider(
+                "At-Risk-Anteil (Regel 1)",
+                min_value=5, max_value=50, value=20, step=1,
+                format="%d%%",
+                help="Wie hoch muss der At-Risk-Anteil sein, damit Regel 1 anschlägt?",
+            )
+            at_risk_threshold = _ar_pct / 100
 
     # ── Schwellwert-Kontext ───────────────────────────────────────────────────
-    with st.expander("Kontext: Wie wurden die Standardwerte gewählt?"):
         hist_changes = actuals['y'].pct_change().dropna()
         if len(hist_changes) > 0:
             hc1, hc2, hc3, hc4 = st.columns(4)
@@ -537,15 +855,11 @@ with tab5:
             hc2.metric("Schlechtester Monat", f"{hist_changes.min():+.1%}")
             hc3.metric("Bester Monat", f"{hist_changes.max():+.1%}")
             hc4.metric("Aktueller At-Risk-Anteil", f"{(rfm['segment']=='At Risk').sum()/len(rfm):.1%}")
-            st.caption(
-                f"Der Schwellwert **{forecast_threshold:.0%}** liegt {'über' if abs(forecast_threshold) < abs(hist_changes.mean()) else 'unter'} "
-                f"dem historischen Durchschnitt ({hist_changes.mean():+.1%}). "
-                f"Ein Rückgang unter {forecast_threshold:.0%} ist also ein **{'normales' if abs(forecast_threshold) < abs(hist_changes.std()) else 'aussergewöhnliches'}** Warnsignal im Kontext dieser Daten."
-            )
 
     # ── Live-Werte berechnen ──────────────────────────────────────────────────
     _future = forecast[forecast['ds'] > actuals['ds'].max()]
-    _last = actuals['y'].iloc[-1]
+    _last, _last_label = forecast_baseline(actuals, forecast_baseline_mode)
+    _last_short = short_baseline_label(_last_label)
     _next = _future['yhat'].iloc[0] if not _future.empty else 0
     _pct  = (_next - _last) / _last if _last > 0 else 0
     _ar_share = (rfm['segment'] == 'At Risk').sum() / len(rfm) if len(rfm) > 0 else 0
@@ -572,10 +886,34 @@ with tab5:
     _r5 = _data_ok and _new_share < 0.05
     _r6 = _data_ok and _top20_share > 0.80
 
-    def _badge(ok: bool, true_label: str, false_label: str) -> str:
-        if ok:
-            return f'<span style="color:#4ade80;font-weight:700">{true_label}</span>'
-        return f'<span style="color:#ef4444;font-weight:700">{false_label}</span>'
+    live_recs = generate_recommendations(
+        forecast,
+        rfm,
+        declining,
+        forecast_threshold,
+        at_risk_threshold,
+        actuals_df=actuals,
+        comparison_value=_last,
+    )
+    agent_run = generate_agent_run(
+        forecast,
+        rfm,
+        declining,
+        forecast_threshold,
+        at_risk_threshold,
+        actuals_df=actuals,
+        comparison_value=_last,
+    )
+
+    render_decision_panel(live_recs[0], "Agenten-Empfehlung")
+    render_evidence_strip([
+        ("Vergleichsumsatz", f"£{_last:,.0f}"),
+        ("Prognose nächster Monat", f"£{_next:,.0f}"),
+        ("Abweichung zur Vergleichsbasis", f"{_pct:+.1%}"),
+        ("At-Risk Kunden", f"{_ar_count:,} · {_ar_share:.1%}"),
+        ("Rückläufige Produkte", f"{len(_significant_declining):,}"),
+        ("Top-20 Umsatzanteil", f"{_top20_share:.0%}"),
+    ])
 
     def _rule_box(title, priority_label, priority_color, conditions_html, fired: bool) -> str:
         border = priority_color if fired else '#334155'
@@ -593,11 +931,11 @@ with tab5:
         </div>"""
 
     def _cond_row(label: str, actual: str, threshold: str, met: bool) -> str:
-        icon = '✅' if met else '❌'
+        icon = '✓' if met else '×'
         return f'<div style="margin-bottom:6px;font-size:13px;color:#e2e8f0">{icon} {label}: <strong>{actual}</strong> <span style="color:#64748b">(Schwelle: {threshold})</span></div>'
 
-    st.divider()
-    st.subheader("Regelstatus — live")
+    st.markdown('<div class="section-kicker">Regelbelege</div>', unsafe_allow_html=True)
+    st.subheader("Regelstatus")
 
     col_r1, col_r2, col_r3 = st.columns(3)
 
@@ -606,7 +944,7 @@ with tab5:
             conds = _cond_row("Datenbasis", f"{len(rfm)} Kunden / Forecast {'negativ' if _next < 0 else 'ok'}", "≥10 Kunden, Forecast ≥0", False)
         else:
             conds = (
-                _cond_row("Forecast nächster Monat", f"{_pct:+.1%}", f"< {forecast_threshold:.0%}", _c1a) +
+                _cond_row("Prognose nächster Monat", f"{_pct:+.1%}", f"< {forecast_threshold:.0%}", _c1a) +
                 _cond_row("At-Risk-Anteil", f"{_ar_share:.1%} ({_ar_count} Kunden)", f"> {at_risk_threshold:.0%}", _c1b) +
                 '<div style="font-size:12px;color:#64748b;margin-top:8px">Beide Bedingungen müssen erfüllt sein.</div>'
             )
@@ -648,31 +986,67 @@ with tab5:
         )
         st.markdown(_rule_box("Kein Handlungsbedarf", "TIEF", "#4ade80", conds3, _r3), unsafe_allow_html=True)
 
-    # ── Empfehlungskarten ─────────────────────────────────────────────────────
+    if len(live_recs) > 1:
+        with st.expander("Weitere Empfehlungen", expanded=False):
+            for rec in live_recs[1:]:
+                render_decision_panel(rec, "Weitere Empfehlung")
+
     st.divider()
-    st.subheader("Empfehlung des Agenten")
+    st.subheader("Agentic Trace")
+    st.caption("Planung, Tool-Nutzung und Synthese der aktuellen Empfehlung.")
+    render_agent_trace(agent_run['trace'])
 
-    live_recs = generate_recommendations(
-        forecast,
-        rfm,
-        declining,
-        forecast_threshold,
-        at_risk_threshold,
-        actuals_df=actuals,
-    )
+    col_guard, col_approval = st.columns([1.2, 1])
+    with col_guard:
+        st.subheader("Guardrails")
+        render_guardrails(agent_run['guardrails'])
 
-    priority_config = {
-        'HOCH':   {'icon': '🔴', 'color': '#ef4444', 'bg': '#2d1515'},
-        'MITTEL': {'icon': '🟡', 'color': '#f59e0b', 'bg': '#2d2410'},
-        'TIEF':   {'icon': '🟢', 'color': '#4ade80', 'bg': '#152d1d'},
-    }
+    with col_approval:
+        st.subheader("Human-in-the-Loop")
+        if agent_run['approval_required']:
+            st.warning("Operative Umsetzung benötigt Management-Freigabe.")
+        else:
+            st.success("Keine zwingende Freigabe nötig.")
 
-    for rec in live_recs:
-        cfg = priority_config.get(rec['priority'], {'icon': '⚪', 'color': '#94a3b8', 'bg': '#1e293b'})
-        st.markdown(f"""
-        <div style="background:{cfg['bg']};border-left:4px solid {cfg['color']};padding:16px 20px;border-radius:8px;margin-bottom:16px;">
-            <div style="font-size:18px;font-weight:700;color:{cfg['color']};margin-bottom:8px;">{cfg['icon']} Priorität: {rec['priority']}</div>
-            <div style="font-size:15px;color:#e2e8f0;margin-bottom:8px;"><strong>Befund:</strong> {rec['finding']}</div>
-            <div style="font-size:15px;color:#e2e8f0;margin-bottom:8px;"><strong>Entscheid:</strong> {rec['decision']}</div>
-            <div style="font-size:13px;color:#94a3b8;"><strong>Begründung:</strong> {rec['reasoning']}</div>
-        </div>""", unsafe_allow_html=True)
+        log_key = "decision_agent_log"
+        if log_key not in st.session_state:
+            st.session_state[log_key] = []
+
+        selected_status = st.radio(
+            "Entscheidungsstatus",
+            ["Offen", "Freigegeben", "Zurückgestellt", "Abgelehnt"],
+            horizontal=True,
+            key="approval_status",
+        )
+        note = st.text_area(
+            "Management-Notiz",
+            placeholder="Kurz begründen, warum die Empfehlung freigegeben, zurückgestellt oder abgelehnt wird.",
+            key="approval_note",
+        )
+        if st.button("Entscheidung protokollieren", type="primary"):
+            entry = {
+                'run_id': agent_run['run_id'],
+                'status': selected_status,
+                'note': note,
+                'decision': live_recs[0]['decision'],
+                'priority': live_recs[0]['priority'],
+                'evidence': agent_run['evidence'],
+            }
+            st.session_state[log_key].insert(0, entry)
+            st.success("Entscheidung wurde im Session-Memory protokolliert.")
+
+        st.download_button(
+            "Agent Run als JSON exportieren",
+            data=json.dumps(agent_run, ensure_ascii=False, indent=2, default=_json_default),
+            file_name=f"decision-agent-run-{agent_run['run_id']}.json",
+            mime="application/json",
+        )
+
+    if st.session_state.get("decision_agent_log"):
+        st.subheader("Entscheidungslog / Memory")
+        log_df = pd.DataFrame(st.session_state["decision_agent_log"])
+        st.dataframe(
+            log_df[['run_id', 'status', 'priority', 'decision', 'note']],
+            use_container_width=True,
+            hide_index=True,
+        )

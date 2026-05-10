@@ -55,6 +55,8 @@ def load_product_analysis(
     end_date: str,
     countries: tuple = (),
     declining_months: int = 3,
+    top_n: int = 10,
+    min_revenue: float = 0,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Returns (top_products_df, declining_products_df)."""
     placeholders = ','.join(['?' for _ in countries])
@@ -77,7 +79,11 @@ def load_product_analysis(
         .reset_index()
         .sort_values('revenue', ascending=False)
     )
+    if min_revenue > 0:
+        total = total[total['revenue'] >= min_revenue]
+        eligible_codes = set(total['stock_code'])
+        df = df[df['stock_code'].isin(eligible_codes)]
 
-    top = get_top_products(total)
+    top = get_top_products(total, n=top_n)
     declining = get_declining_products(df, months=declining_months)
     return top, declining
