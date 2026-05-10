@@ -1,6 +1,7 @@
 import pandas as pd
 import sqlite3
 
+from src.data_processing import country_filter_clause, date_range_params
 from src.semantic import NON_PRODUCT_STOCK_CODES  # re-exported for backward compatibility
 
 __all__ = [
@@ -57,17 +58,17 @@ def load_product_analysis(
     min_revenue: float = 0,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Returns (top_products_df, declining_products_df)."""
-    placeholders = ','.join(['?' for _ in countries])
+    country_clause, country_params = country_filter_clause(countries)
     sql = f"""
         SELECT stock_code, description,
                strftime('%Y-%m', invoice_date) AS month,
                SUM(revenue) AS revenue
         FROM transactions
-        WHERE invoice_date >= ? AND invoice_date <= ?
-        AND country IN ({placeholders})
+        WHERE invoice_date >= ? AND invoice_date < ?
+        {country_clause}
         GROUP BY stock_code, description, month
         """
-    params = (start_date, end_date + ' 23:59:59') + countries
+    params = date_range_params(start_date, end_date) + country_params
     df = pd.read_sql(sql, conn, params=params)
     df = filter_product_rows(df)
 

@@ -6,6 +6,7 @@ from src.semantic import AgentThresholds  # re-exported for backward compatibili
 __all__ = [
     'AgentThresholds',
     'compute_agent_kpis',
+    'evaluate_guardrails',
     'build_agent_run',
     'generate_agent_run',
     'generate_recommendations',
@@ -99,6 +100,217 @@ def compute_agent_kpis(
     }
 
 
+# ── Guardrails ───────────────────────────────────────────────────────────────
+# Guardrails are computed once and consumed by both generate_recommendations
+# (to enforce blocking conditions) and build_agent_run (to record status in the
+# trace). The `blocks` flag distinguishes hard-stops (data unusable, return
+# fallback rec) from soft signals (Human-in-the-Loop is required but does not
+# prevent recommendation generation).
+
+GUARDRAIL_MIN_CUSTOMERS = 'Mindestdatenbasis Kunden'
+GUARDRAIL_FORECAST_PRESENT = 'Forecast-Zukunftsmonat vorhanden'
+GUARDRAIL_FORECAST_NON_NEGATIVE = 'Forecast nicht negativ'
+GUARDRAIL_HUMAN_APPROVAL = 'Human-in-the-Loop'
+
+
+def evaluate_guardrails(kpis: dict, recommendations: list[dict] | None = None) -> list[dict]:
+    """Return data-quality and process guardrails for a single agent run."""
+    forecast_ctx = kpis['forecast']
+    customer_count = kpis['customer_count']
+    next_forecast = forecast_ctx['next_forecast']
+    has_baseline = forecast_ctx['baseline'] is not None and forecast_ctx['baseline'] > 0
+
+    guardrails = [
+        {
+            'name': GUARDRAIL_MIN_CUSTOMERS,
+            'status': 'pass' if customer_count >= 10 else 'warn',
+            'detail': f'{customer_count} Kunden im aktuellen Filter',
+            'blocks': customer_count < 10,
+        },
+        {
+            'name': GUARDRAIL_FORECAST_PRESENT,
+            'status': 'pass' if (next_forecast is not None and has_baseline) else 'fail',
+            'detail': f"{forecast_ctx['future_months']} zukünftige Forecast-Monate",
+            'blocks': next_forecast is None or not has_baseline,
+        },
+        {
+            'name': GUARDRAIL_FORECAST_NON_NEGATIVE,
+            'status': 'pass' if (next_forecast is None or next_forecast >= 0) else 'warn',
+            'detail': 'Negative Umsatzprognosen werden als nicht plausibel markiert',
+            'blocks': next_forecast is not None and next_forecast < 0,
+        },
+    ]
+
+    needs_approval = bool(recommendations) and recommendations[0]['priority'] in {'HOCH', 'MITTEL'}
+    guardrails.append({
+        'name': GUARDRAIL_HUMAN_APPROVAL,
+        'status': 'required' if needs_approval else 'optional',
+        'detail': 'Management-Freigabe vor operativer Umsetzung',
+        'blocks': False,
+    })
+    return guardrails
+
+
+def _guardrail(guardrails: list[dict], name: str) -> dict | None:
+    return next((g for g in guardrails if g['name'] == name), None)
+
+
+# ── Per-rule recommendation builders ─────────────────────────────────────────
+# Each rule consumes the same KPI dict and returns a recommendation or None.
+# Splitting them mirrors the rule table in the report 1:1 and keeps each
+# rule's condition + finding + reasoning collocated.
+
+def _rule_forecast_at_risk(kpis: dict, thresholds: AgentThresholds) -> dict | None:
+    pct_change = kpis['forecast']['pct_change']
+    if pct_change is None or pct_change >= thresholds.forecast_decline:
+        return None
+    if kpis['at_risk_share'] <= thresholds.at_risk_share:
+        return None
+    return {
+        'priority': 'HOCH',
+        'finding': f'Umsatz-Forecast zeigt {pct_change:.1%} Rückgang nächsten Monat.',
+        'decision': 'Reaktivierungskampagne für At-Risk-Kunden starten.',
+        'reasoning': (
+            f"{kpis['at_risk_count']} Kunden ({kpis['at_risk_share']:.1%}) im Segment "
+            f"\"At Risk\" — kombiniert mit sinkendem Forecast erhöht sich Abwanderungsrisiko."
+        ),
+    }
+
+
+def _rule_declining_products(kpis: dict, thresholds: AgentThresholds) -> dict | None:
+    significant = kpis['significant_declining']
+    if len(significant) == 0:
+        return None
+    product_list = ', '.join(significant['description'].head(5).tolist())
+    return {
+        'priority': 'MITTEL',
+        'finding': (
+            f'{len(significant)} Produkte zeigen ≥3 Monate rückläufigen Umsatz und '
+            f'Monatsumsatz < {int(thresholds.declining_product_share * 100)}% des Produktdurchschnitts.'
+        ),
+        'decision': 'Sortiment bereinigen: betroffene Produkte prüfen und ggf. absetzen.',
+        'reasoning': f'Betroffene Produkte: {product_list}.',
+    }
+
+
+def _rule_low_champion_share(kpis: dict, thresholds: AgentThresholds) -> dict | None:
+    if kpis['champion_share'] >= thresholds.champion_share:
+        return None
+    return {
+        'priority': 'MITTEL',
+        'finding': (
+            f"Champion-Anteil zu niedrig: nur {kpis['champion_share']:.1%} der Kunden sind "
+            f"Top-Käufer ({kpis['champion_count']} Personen)."
+        ),
+        'decision': 'Kundenbindungsprogramm aufbauen: Loyal-Kunden aktiv zu Champions entwickeln.',
+        'reasoning': 'Ein gesunder Kundenstamm hat typischerweise 15–25% Champions. Darunter fehlt die Basis für stabile Wiederholungsumsätze.',
+    }
+
+
+def _rule_low_new_customers(kpis: dict, thresholds: AgentThresholds) -> dict | None:
+    if kpis['new_share'] >= thresholds.new_customer_share:
+        return None
+    return {
+        'priority': 'MITTEL',
+        'finding': (
+            f"Neukunden-Anteil kritisch niedrig: nur {kpis['new_share']:.1%} der Kunden sind "
+            f"Neukunden ({kpis['new_count']} Personen)."
+        ),
+        'decision': 'Neukundenakquisition prüfen: Marketing-Kanäle und Erstbestellangebote ausbauen.',
+        'reasoning': 'Ohne kontinuierlichen Neukunden-Zufluss schrumpft der Kundenstamm langfristig, da bestehende Kunden natürlich abwandern.',
+    }
+
+
+def _rule_top20_concentration(kpis: dict, thresholds: AgentThresholds) -> dict | None:
+    if kpis['top20_share'] <= thresholds.top_customer_revenue_share:
+        return None
+    return {
+        'priority': 'MITTEL',
+        'finding': f"Klumpenrisiko: Top 20% der Kunden generieren {kpis['top20_share']:.0%} des Umsatzes.",
+        'decision': 'Kundenstamm diversifizieren: Abhängigkeit von wenigen Schlüsselkunden reduzieren.',
+        'reasoning': 'Hohe Umsatzkonzentration bedeutet hohes Risiko — der Verlust weniger Grosskunden kann den Gesamtumsatz stark beeinflussen.',
+    }
+
+
+# Order matters: highest-priority rules first.
+_RULES = (
+    _rule_forecast_at_risk,
+    _rule_declining_products,
+    _rule_low_champion_share,
+    _rule_low_new_customers,
+    _rule_top20_concentration,
+)
+
+
+def _data_thin_recommendation(kpis: dict) -> dict:
+    return {
+        'priority': 'MITTEL',
+        'finding': f"Datenbasis zu dünn: nur {kpis['customer_count']} Kunden im gewählten Zeitraum/Land.",
+        'decision': 'Filter anpassen oder breiteren Zeitraum wählen.',
+        'reasoning': 'Für eine zuverlässige Analyse werden mindestens 10 Kunden benötigt. Empfehlungen auf Basis weniger Datenpunkte sind statistisch nicht belastbar.',
+    }
+
+
+def _negative_forecast_recommendation(next_forecast: float) -> dict:
+    return {
+        'priority': 'MITTEL',
+        'finding': f'Prophet-Forecast liefert negativen Umsatz (£{next_forecast:,.0f}) — nicht plausibel.',
+        'decision': 'Datenbasis prüfen: zu wenige Monate oder zu wenig Umsatz für zuverlässige Prognose.',
+        'reasoning': 'Ein negativer Forecast deutet auf unzureichende Datenmenge hin. Für einen belastbaren Forecast werden mindestens 6 Monate Umsatzdaten empfohlen.',
+    }
+
+
+def _no_action_recommendation(kpis: dict) -> dict:
+    pct_change = kpis['forecast']['pct_change']
+    pct_str = f"{pct_change:+.1%}" if pct_change is not None else "n/a"
+    return {
+        'priority': 'TIEF',
+        'finding': f"Forecast: {pct_str}. Champion-Anteil: {kpis['champion_share']:.1%}.",
+        'decision': 'Kein unmittelbarer Handlungsbedarf.',
+        'reasoning': 'Alle KPIs im grünen Bereich. Reguläre Erfolgskontrolle genügt.',
+    }
+
+
+def generate_recommendations(
+    forecast_df,
+    rfm_df,
+    declining_df,
+    forecast_threshold: float = -0.05,
+    at_risk_threshold: float = 0.20,
+    actuals_df=None,
+    comparison_value: float | None = None,
+    kpis: dict | None = None,
+):
+    if kpis is None:
+        thresholds = AgentThresholds(
+            forecast_decline=forecast_threshold,
+            at_risk_share=at_risk_threshold,
+        )
+        kpis = compute_agent_kpis(
+            forecast_df, rfm_df, declining_df, thresholds, actuals_df, comparison_value
+        )
+    thresholds = kpis['thresholds']
+
+    guardrails = evaluate_guardrails(kpis)
+
+    if _guardrail(guardrails, GUARDRAIL_MIN_CUSTOMERS)['blocks']:
+        return [_data_thin_recommendation(kpis)]
+
+    if _guardrail(guardrails, GUARDRAIL_FORECAST_PRESENT)['blocks']:
+        return []
+
+    if _guardrail(guardrails, GUARDRAIL_FORECAST_NON_NEGATIVE)['blocks']:
+        return [_negative_forecast_recommendation(kpis['forecast']['next_forecast'])]
+
+    recommendations = [rule(kpis, thresholds) for rule in _RULES]
+    recommendations = [r for r in recommendations if r is not None]
+
+    if not recommendations:
+        recommendations.append(_no_action_recommendation(kpis))
+
+    return recommendations
+
+
 def build_agent_run(
     forecast_df,
     rfm_df,
@@ -126,28 +338,7 @@ def build_agent_run(
     at_risk_count = kpis['at_risk_count']
     significant_declining = kpis['significant_declining']
 
-    guardrails = [
-        {
-            'name': 'Mindestdatenbasis Kunden',
-            'status': 'pass' if customer_count >= 10 else 'warn',
-            'detail': f'{customer_count} Kunden im aktuellen Filter',
-        },
-        {
-            'name': 'Forecast-Zukunftsmonat vorhanden',
-            'status': 'pass' if forecast_ctx['next_forecast'] is not None else 'fail',
-            'detail': f"{forecast_ctx['future_months']} zukünftige Forecast-Monate",
-        },
-        {
-            'name': 'Forecast nicht negativ',
-            'status': 'pass' if (forecast_ctx['next_forecast'] is None or forecast_ctx['next_forecast'] >= 0) else 'warn',
-            'detail': 'Negative Umsatzprognosen werden als nicht plausibel markiert',
-        },
-        {
-            'name': 'Human-in-the-Loop',
-            'status': 'required' if recommendations and recommendations[0]['priority'] in {'HOCH', 'MITTEL'} else 'optional',
-            'detail': 'Management-Freigabe vor operativer Umsetzung',
-        },
-    ]
+    guardrails = evaluate_guardrails(kpis, recommendations)
 
     evidence = {
         'baseline_revenue': forecast_ctx['baseline'],
@@ -202,7 +393,9 @@ def build_agent_run(
         },
     ]
 
-    approval_required = any(g['name'] == 'Human-in-the-Loop' and g['status'] == 'required' for g in guardrails)
+    approval_required = any(
+        g['name'] == GUARDRAIL_HUMAN_APPROVAL and g['status'] == 'required' for g in guardrails
+    )
     return {
         'run_id': datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f'),
         'goal': 'Priorisierte BI-Entscheidung fuer Management vorbereiten',
@@ -252,104 +445,3 @@ def generate_agent_run(
         comparison_value,
         kpis=kpis,
     )
-
-
-def generate_recommendations(
-    forecast_df,
-    rfm_df,
-    declining_df,
-    forecast_threshold: float = -0.05,
-    at_risk_threshold: float = 0.20,
-    actuals_df=None,
-    comparison_value: float | None = None,
-    kpis: dict | None = None,
-):
-    if kpis is None:
-        thresholds = AgentThresholds(
-            forecast_decline=forecast_threshold,
-            at_risk_share=at_risk_threshold,
-        )
-        kpis = compute_agent_kpis(
-            forecast_df, rfm_df, declining_df, thresholds, actuals_df, comparison_value
-        )
-    thresholds = kpis['thresholds']
-    recommendations = []
-
-    if kpis['customer_count'] < 10:
-        recommendations.append({
-            'priority': 'MITTEL',
-            'finding': f"Datenbasis zu dünn: nur {kpis['customer_count']} Kunden im gewählten Zeitraum/Land.",
-            'decision': 'Filter anpassen oder breiteren Zeitraum wählen.',
-            'reasoning': 'Für eine zuverlässige Analyse werden mindestens 10 Kunden benötigt. Empfehlungen auf Basis weniger Datenpunkte sind statistisch nicht belastbar.',
-        })
-        return recommendations
-
-    forecast_ctx = kpis['forecast']
-    last_actual = forecast_ctx['baseline']
-    next_forecast = forecast_ctx['next_forecast']
-    pct_change = forecast_ctx['pct_change']
-
-    if next_forecast is None or last_actual is None or last_actual <= 0:
-        return recommendations
-
-    if next_forecast < 0:
-        recommendations.append({
-            'priority': 'MITTEL',
-            'finding': f'Prophet-Forecast liefert negativen Umsatz (£{next_forecast:,.0f}) — nicht plausibel.',
-            'decision': 'Datenbasis prüfen: zu wenige Monate oder zu wenig Umsatz für zuverlässige Prognose.',
-            'reasoning': 'Ein negativer Forecast deutet auf unzureichende Datenmenge hin. Für einen belastbaren Forecast werden mindestens 6 Monate Umsatzdaten empfohlen.',
-        })
-        return recommendations
-
-    if pct_change is not None and pct_change < thresholds.forecast_decline and kpis['at_risk_share'] > thresholds.at_risk_share:
-        recommendations.append({
-            'priority': 'HOCH',
-            'finding': f'Umsatz-Forecast zeigt {pct_change:.1%} Rückgang nächsten Monat.',
-            'decision': 'Reaktivierungskampagne für At-Risk-Kunden starten.',
-            'reasoning': f"{kpis['at_risk_count']} Kunden ({kpis['at_risk_share']:.1%}) im Segment \"At Risk\" — kombiniert mit sinkendem Forecast erhöht sich Abwanderungsrisiko.",
-        })
-
-    significant_declining = kpis['significant_declining']
-    if len(significant_declining) > 0:
-        product_list = ', '.join(significant_declining['description'].head(5).tolist())
-        recommendations.append({
-            'priority': 'MITTEL',
-            'finding': f'{len(significant_declining)} Produkte zeigen ≥3 Monate rückläufigen Umsatz und Monatsumsatz < 50% des Produktdurchschnitts.',
-            'decision': 'Sortiment bereinigen: betroffene Produkte prüfen und ggf. absetzen.',
-            'reasoning': f'Betroffene Produkte: {product_list}.',
-        })
-
-    if kpis['champion_share'] < thresholds.champion_share:
-        recommendations.append({
-            'priority': 'MITTEL',
-            'finding': f"Champion-Anteil zu niedrig: nur {kpis['champion_share']:.1%} der Kunden sind Top-Käufer ({kpis['champion_count']} Personen).",
-            'decision': 'Kundenbindungsprogramm aufbauen: Loyal-Kunden aktiv zu Champions entwickeln.',
-            'reasoning': 'Ein gesunder Kundenstamm hat typischerweise 15–25% Champions. Darunter fehlt die Basis für stabile Wiederholungsumsätze.',
-        })
-
-    if kpis['new_share'] < thresholds.new_customer_share:
-        recommendations.append({
-            'priority': 'MITTEL',
-            'finding': f"Neukunden-Anteil kritisch niedrig: nur {kpis['new_share']:.1%} der Kunden sind Neukunden ({kpis['new_count']} Personen).",
-            'decision': 'Neukundenakquisition prüfen: Marketing-Kanäle und Erstbestellangebote ausbauen.',
-            'reasoning': 'Ohne kontinuierlichen Neukunden-Zufluss schrumpft der Kundenstamm langfristig, da bestehende Kunden natürlich abwandern.',
-        })
-
-    if kpis['top20_share'] > thresholds.top_customer_revenue_share:
-        recommendations.append({
-            'priority': 'MITTEL',
-            'finding': f"Klumpenrisiko: Top 20% der Kunden generieren {kpis['top20_share']:.0%} des Umsatzes.",
-            'decision': 'Kundenstamm diversifizieren: Abhängigkeit von wenigen Schlüsselkunden reduzieren.',
-            'reasoning': 'Hohe Umsatzkonzentration bedeutet hohes Risiko — der Verlust weniger Grosskunden kann den Gesamtumsatz stark beeinflussen.',
-        })
-
-    if not recommendations:
-        pct_str = f"{pct_change:+.1%}" if pct_change is not None else "n/a"
-        recommendations.append({
-            'priority': 'TIEF',
-            'finding': f"Forecast: {pct_str}. Champion-Anteil: {kpis['champion_share']:.1%}.",
-            'decision': 'Kein unmittelbarer Handlungsbedarf.',
-            'reasoning': 'Alle KPIs im grünen Bereich. Reguläre Erfolgskontrolle genügt.',
-        })
-
-    return recommendations

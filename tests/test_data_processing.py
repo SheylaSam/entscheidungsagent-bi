@@ -3,7 +3,13 @@ import pandas as pd
 import sqlite3
 import tempfile
 import os
-from src.data_processing import clean_dataframe, load_to_sqlite, get_connection
+from src.data_processing import (
+    clean_dataframe,
+    country_filter_clause,
+    date_range_params,
+    get_connection,
+    load_to_sqlite,
+)
 
 def make_raw_df():
     return pd.DataFrame({
@@ -49,5 +55,40 @@ def test_load_to_sqlite_creates_table():
         result = conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
         conn.close()
         assert result == len(df)
+    finally:
+        os.unlink(db_path)
+
+
+def test_country_filter_clause_is_empty_when_no_countries_given():
+    clause, params = country_filter_clause(())
+    assert clause == ""
+    assert params == ()
+
+
+def test_country_filter_clause_uses_parameterised_in_clause():
+    clause, params = country_filter_clause(('United Kingdom', 'Germany'))
+    assert clause == " AND country IN (?,?)"
+    assert params == ('United Kingdom', 'Germany')
+
+
+def test_date_range_params_returns_exclusive_upper_bound():
+    start, end = date_range_params('2010-01-01', '2010-01-31')
+    assert start == '2010-01-01'
+    assert end == '2010-02-01'
+
+
+def test_load_rfm_does_not_crash_with_empty_country_filter():
+    """Empty countries tuple must not produce invalid SQL ``country IN ()``."""
+    from src.rfm_analysis import load_rfm
+
+    df = clean_dataframe(make_raw_df())
+    with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as f:
+        db_path = f.name
+    try:
+        load_to_sqlite(df, db_path)
+        conn = sqlite3.connect(db_path)
+        result = load_rfm(conn, '2009-01-01', '2009-12-31', countries=())
+        conn.close()
+        assert isinstance(result, pd.DataFrame)
     finally:
         os.unlink(db_path)

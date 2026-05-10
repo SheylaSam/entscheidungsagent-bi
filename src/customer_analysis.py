@@ -1,6 +1,8 @@
 import pandas as pd
 import sqlite3
 
+from src.data_processing import country_filter_clause, date_range_params
+
 
 def get_primary_customer_country(transactions: pd.DataFrame) -> pd.DataFrame:
     """Return one primary country per customer, selected by highest revenue."""
@@ -21,15 +23,15 @@ def load_primary_customer_country(
     end_date: str,
     countries: tuple = (),
 ) -> pd.DataFrame:
-    placeholders = ','.join(['?' for _ in countries])
+    country_clause, country_params = country_filter_clause(countries)
     df = pd.read_sql(
         f"""SELECT customer_id, country, revenue
             FROM transactions
-            WHERE invoice_date >= ? AND invoice_date <= ?
-            AND country IN ({placeholders})
+            WHERE invoice_date >= ? AND invoice_date < ?
+            {country_clause}
             AND customer_id IS NOT NULL""",
         conn,
-        params=(start_date, end_date + ' 23:59:59') + countries,
+        params=date_range_params(start_date, end_date) + country_params,
     )
     return get_primary_customer_country(df)
 

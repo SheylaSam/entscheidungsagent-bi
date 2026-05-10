@@ -3,6 +3,8 @@ import pandas as pd
 import sqlite3
 import cmdstanpy
 
+from src.data_processing import country_filter_clause, date_range_params
+
 # Prophet bundles a stub cmdstan-2.33.1 directory that is often incomplete.
 # Fall back to the system-installed CmdStan when that happens.
 try:
@@ -28,13 +30,13 @@ def prepare_monthly_series(
     end_date: str,
     countries: tuple = (),
 ) -> pd.DataFrame:
-    placeholders = ','.join(['?' for _ in countries])
+    country_clause, country_params = country_filter_clause(countries)
     sql = (
         "SELECT invoice_date, revenue FROM transactions"
-        f" WHERE invoice_date >= ? AND invoice_date <= ?"
-        f" AND country IN ({placeholders})"
+        " WHERE invoice_date >= ? AND invoice_date < ?"
+        f"{country_clause}"
     )
-    params = (start_date, end_date + ' 23:59:59') + countries
+    params = date_range_params(start_date, end_date) + country_params
     df = pd.read_sql(sql, conn, params=params, parse_dates=['invoice_date'])
     monthly = (
         df.set_index('invoice_date')

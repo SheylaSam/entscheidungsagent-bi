@@ -2,6 +2,7 @@ import pandas as pd
 from src.decision_agent import (
     AgentThresholds,
     compute_agent_kpis,
+    evaluate_guardrails,
     generate_agent_run,
     generate_recommendations,
 )
@@ -218,3 +219,28 @@ def test_generate_agent_run_passes_kpis_consistently_to_recommendations_and_evid
     assert run['evidence']['at_risk_count'] == 25
     assert run['evidence']['at_risk_share'] == 0.25
     assert any('25 Kunden' in r['reasoning'] for r in run['recommendations'])
+
+
+# ── Guardrails ────────────────────────────────────────────────────────────────
+
+def test_guardrails_block_when_customer_base_is_too_thin():
+    rfm = pd.DataFrame({'segment': ['Champions'] * 5, 'monetary': [1000.0] * 5})
+    kpis = compute_agent_kpis(make_forecast_decline(), rfm, make_no_declining(), actuals_df=make_actuals())
+    guardrails = evaluate_guardrails(kpis)
+    min_customers = next(g for g in guardrails if g['name'] == 'Mindestdatenbasis Kunden')
+    assert min_customers['blocks'] is True
+    assert min_customers['status'] == 'warn'
+
+
+def test_guardrails_pass_when_data_quality_is_sufficient():
+    kpis = compute_agent_kpis(make_forecast_decline(), make_rfm_high_at_risk(), make_no_declining(), actuals_df=make_actuals())
+    guardrails = evaluate_guardrails(kpis)
+    assert all(not g['blocks'] for g in guardrails)
+
+
+def test_guardrails_block_negative_forecast_so_no_business_rule_fires():
+    recs = generate_recommendations(make_forecast_negative(), make_rfm_high_at_risk(), make_no_declining())
+    # When the negative-forecast guardrail blocks, only the data-quality
+    # recommendation is produced — none of the 5 business rules.
+    assert len(recs) == 1
+    assert 'negativ' in recs[0]['finding'].lower()

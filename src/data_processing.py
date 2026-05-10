@@ -46,6 +46,28 @@ def get_connection(db_path: str | Path = DB_PATH) -> sqlite3.Connection:
     return sqlite3.connect(db_path)
 
 
+def country_filter_clause(countries: tuple) -> tuple[str, tuple]:
+    """Return (sql_fragment, params) for filtering transactions by country.
+
+    Empty tuple → empty fragment, so callers can safely default to "no country
+    filter" without producing the invalid SQL ``country IN ()``.
+    """
+    if not countries:
+        return "", ()
+    placeholders = ",".join("?" for _ in countries)
+    return f" AND country IN ({placeholders})", countries
+
+
+def date_range_params(start_date: str, end_date: str) -> tuple[str, str]:
+    """Return (start, exclusive_end) for ``invoice_date >= ? AND invoice_date < ?``.
+
+    Replaces the string concat ``end_date + ' 23:59:59'`` with a proper
+    next-day upper bound, which also keeps the full end_date inclusive.
+    """
+    end_exclusive = (pd.Timestamp(end_date) + pd.Timedelta(days=1)).strftime('%Y-%m-%d')
+    return start_date, end_exclusive
+
+
 def build_database(excel_path: str | Path = EXCEL_PATH, db_path: str | Path = DB_PATH) -> None:
     """Import Excel → SQLite. Skips if DB already exists."""
     if Path(db_path).exists():
