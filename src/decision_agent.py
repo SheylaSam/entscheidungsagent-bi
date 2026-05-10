@@ -36,6 +36,70 @@ def _forecast_context(forecast_df, actuals_df=None, comparison_value: float | No
     }
 
 
+def compute_agent_kpis(
+    forecast_df,
+    rfm_df,
+    declining_df,
+    thresholds: AgentThresholds | None = None,
+    actuals_df=None,
+    comparison_value: float | None = None,
+) -> dict:
+    """Single source of truth for the KPIs the agent layers consume.
+
+    build_agent_run, generate_recommendations and the dashboard rule status
+    panel all read from this dict, so KPIs cannot drift between layers.
+    """
+    if thresholds is None:
+        thresholds = AgentThresholds()
+
+    forecast_ctx = _forecast_context(forecast_df, actuals_df, comparison_value)
+    customer_count = len(rfm_df)
+    actual_months = 0 if actuals_df is None else len(actuals_df)
+
+    if customer_count:
+        at_risk_count = int((rfm_df['segment'] == 'At Risk').sum())
+        champion_count = int((rfm_df['segment'] == 'Champions').sum())
+        new_count = int((rfm_df['segment'] == 'New').sum())
+    else:
+        at_risk_count = champion_count = new_count = 0
+
+    at_risk_share = at_risk_count / customer_count if customer_count else 0.0
+    champion_share = champion_count / customer_count if customer_count else 0.0
+    new_share = new_count / customer_count if customer_count else 0.0
+
+    if customer_count >= 5 and rfm_df['monetary'].sum() > 0:
+        top_n = max(1, int(customer_count * 0.2))
+        top20_share = float(
+            rfm_df['monetary'].sort_values(ascending=False).head(top_n).sum()
+            / rfm_df['monetary'].sum()
+        )
+    else:
+        top20_share = 0.0
+
+    if 'revenue_avg' in declining_df.columns and len(declining_df) > 0:
+        significant_declining = declining_df[
+            declining_df['revenue_last_month']
+            < declining_df['revenue_avg'] * thresholds.declining_product_share
+        ]
+    else:
+        significant_declining = declining_df
+
+    return {
+        'thresholds': thresholds,
+        'forecast': forecast_ctx,
+        'customer_count': customer_count,
+        'actual_months': actual_months,
+        'at_risk_count': at_risk_count,
+        'at_risk_share': at_risk_share,
+        'champion_count': champion_count,
+        'champion_share': champion_share,
+        'new_count': new_count,
+        'new_share': new_share,
+        'top20_share': top20_share,
+        'significant_declining': significant_declining,
+    }
+
+
 def build_agent_run(
     forecast_df,
     rfm_df,
@@ -45,32 +109,23 @@ def build_agent_run(
     at_risk_threshold: float = 0.20,
     actuals_df=None,
     comparison_value: float | None = None,
+    kpis: dict | None = None,
 ) -> dict:
     """Return an auditable agent run around the deterministic recommendation logic."""
-    thresholds = AgentThresholds(
-        forecast_decline=forecast_threshold,
-        at_risk_share=at_risk_threshold,
-    )
-    forecast_ctx = _forecast_context(forecast_df, actuals_df, comparison_value)
-    customer_count = len(rfm_df)
-    actual_months = 0 if actuals_df is None else len(actuals_df)
-    at_risk_count = (rfm_df['segment'] == 'At Risk').sum() if customer_count else 0
-    at_risk_share = at_risk_count / customer_count if customer_count else 0
-    champion_share = (rfm_df['segment'] == 'Champions').sum() / customer_count if customer_count else 0
-    new_share = (rfm_df['segment'] == 'New').sum() / customer_count if customer_count else 0
-    if len(rfm_df) >= 5 and rfm_df['monetary'].sum() > 0:
-        top_n = max(1, int(len(rfm_df) * 0.2))
-        top20_share = rfm_df['monetary'].sort_values(ascending=False).head(top_n).sum() / rfm_df['monetary'].sum()
-    else:
-        top20_share = 0
+    if kpis is None:
+        thresholds = AgentThresholds(
+            forecast_decline=forecast_threshold,
+            at_risk_share=at_risk_threshold,
+        )
+        kpis = compute_agent_kpis(
+            forecast_df, rfm_df, declining_df, thresholds, actuals_df, comparison_value
+        )
 
-    if 'revenue_avg' in declining_df.columns and len(declining_df) > 0:
-        significant_declining = declining_df[
-            declining_df['revenue_last_month']
-            < declining_df['revenue_avg'] * thresholds.declining_product_share
-        ]
-    else:
-        significant_declining = declining_df
+    forecast_ctx = kpis['forecast']
+    customer_count = kpis['customer_count']
+    actual_months = kpis['actual_months']
+    at_risk_count = kpis['at_risk_count']
+    significant_declining = kpis['significant_declining']
 
     guardrails = [
         {
@@ -102,11 +157,11 @@ def build_agent_run(
         'customer_count': customer_count,
         'actual_months': actual_months,
         'at_risk_count': at_risk_count,
-        'at_risk_share': at_risk_share,
-        'champion_share': champion_share,
-        'new_customer_share': new_share,
+        'at_risk_share': kpis['at_risk_share'],
+        'champion_share': kpis['champion_share'],
+        'new_customer_share': kpis['new_share'],
         'significant_declining_products': len(significant_declining),
-        'top20_revenue_share': top20_share,
+        'top20_revenue_share': kpis['top20_share'],
     }
 
     trace = [
@@ -170,6 +225,13 @@ def generate_agent_run(
     actuals_df=None,
     comparison_value: float | None = None,
 ) -> dict:
+    thresholds = AgentThresholds(
+        forecast_decline=forecast_threshold,
+        at_risk_share=at_risk_threshold,
+    )
+    kpis = compute_agent_kpis(
+        forecast_df, rfm_df, declining_df, thresholds, actuals_df, comparison_value
+    )
     recommendations = generate_recommendations(
         forecast_df,
         rfm_df,
@@ -178,6 +240,7 @@ def generate_agent_run(
         at_risk_threshold,
         actuals_df,
         comparison_value,
+        kpis=kpis,
     )
     return build_agent_run(
         forecast_df,
@@ -188,6 +251,7 @@ def generate_agent_run(
         at_risk_threshold,
         actuals_df,
         comparison_value,
+        kpis=kpis,
     )
 
 
@@ -199,41 +263,35 @@ def generate_recommendations(
     at_risk_threshold: float = 0.20,
     actuals_df=None,
     comparison_value: float | None = None,
+    kpis: dict | None = None,
 ):
-    thresholds = AgentThresholds(
-        forecast_decline=forecast_threshold,
-        at_risk_share=at_risk_threshold,
-    )
+    if kpis is None:
+        thresholds = AgentThresholds(
+            forecast_decline=forecast_threshold,
+            at_risk_share=at_risk_threshold,
+        )
+        kpis = compute_agent_kpis(
+            forecast_df, rfm_df, declining_df, thresholds, actuals_df, comparison_value
+        )
+    thresholds = kpis['thresholds']
     recommendations = []
 
-    if len(rfm_df) < 10:
+    if kpis['customer_count'] < 10:
         recommendations.append({
             'priority': 'MITTEL',
-            'finding': f'Datenbasis zu dünn: nur {len(rfm_df)} Kunden im gewählten Zeitraum/Land.',
+            'finding': f"Datenbasis zu dünn: nur {kpis['customer_count']} Kunden im gewählten Zeitraum/Land.",
             'decision': 'Filter anpassen oder breiteren Zeitraum wählen.',
             'reasoning': 'Für eine zuverlässige Analyse werden mindestens 10 Kunden benötigt. Empfehlungen auf Basis weniger Datenpunkte sind statistisch nicht belastbar.',
         })
         return recommendations
 
-    if actuals_df is not None and not actuals_df.empty:
-        last_actual = comparison_value if comparison_value is not None else actuals_df['y'].iloc[-1]
-        future = forecast_df[forecast_df['ds'] > actuals_df['ds'].max()]
-        if future.empty:
-            return recommendations
-        next_forecast = future['yhat'].iloc[0]
-    else:
-        history = forecast_df.iloc[:-3] if len(forecast_df) > 3 else forecast_df.iloc[:-1]
-        future = forecast_df.tail(3) if len(forecast_df) > 3 else forecast_df.tail(1)
-        if history.empty or future.empty:
-            return recommendations
-        last_actual = history['yhat'].iloc[-1]
-        next_forecast = future['yhat'].iloc[0]
+    forecast_ctx = kpis['forecast']
+    last_actual = forecast_ctx['baseline']
+    next_forecast = forecast_ctx['next_forecast']
+    pct_change = forecast_ctx['pct_change']
 
-    if last_actual <= 0:
+    if next_forecast is None or last_actual is None or last_actual <= 0:
         return recommendations
-
-    pct_change = (next_forecast - last_actual) / last_actual
-    at_risk_share = (rfm_df['segment'] == 'At Risk').sum() / len(rfm_df) if len(rfm_df) > 0 else 0
 
     if next_forecast < 0:
         recommendations.append({
@@ -244,69 +302,53 @@ def generate_recommendations(
         })
         return recommendations
 
-    if pct_change < thresholds.forecast_decline and at_risk_share > thresholds.at_risk_share:
-        at_risk_count = (rfm_df['segment'] == 'At Risk').sum()
+    if pct_change is not None and pct_change < thresholds.forecast_decline and kpis['at_risk_share'] > thresholds.at_risk_share:
         recommendations.append({
             'priority': 'HOCH',
             'finding': f'Umsatz-Forecast zeigt {pct_change:.1%} Rückgang nächsten Monat.',
             'decision': 'Reaktivierungskampagne für At-Risk-Kunden starten.',
-            'reasoning': f'{at_risk_count} Kunden ({at_risk_share:.1%}) im Segment "At Risk" — kombiniert mit sinkendem Forecast erhöht sich Abwanderungsrisiko.',
+            'reasoning': f"{kpis['at_risk_count']} Kunden ({kpis['at_risk_share']:.1%}) im Segment \"At Risk\" — kombiniert mit sinkendem Forecast erhöht sich Abwanderungsrisiko.",
         })
 
-    if len(declining_df) > 0:
-        if 'revenue_avg' in declining_df.columns:
-            significant = declining_df[
-                declining_df['revenue_last_month']
-                < declining_df['revenue_avg'] * thresholds.declining_product_share
-            ]
-        else:
-            significant = declining_df
-        if len(significant) > 0:
-            product_list = ', '.join(significant['description'].head(5).tolist())
-            recommendations.append({
-                'priority': 'MITTEL',
-                'finding': f'{len(significant)} Produkte zeigen ≥3 Monate rückläufigen Umsatz und Monatsumsatz < 50% des Produktdurchschnitts.',
-                'decision': 'Sortiment bereinigen: betroffene Produkte prüfen und ggf. absetzen.',
-                'reasoning': f'Betroffene Produkte: {product_list}.',
-            })
-
-    champion_share = (rfm_df['segment'] == 'Champions').sum() / len(rfm_df)
-    if champion_share < thresholds.champion_share:
-        champion_count = (rfm_df['segment'] == 'Champions').sum()
+    significant_declining = kpis['significant_declining']
+    if len(significant_declining) > 0:
+        product_list = ', '.join(significant_declining['description'].head(5).tolist())
         recommendations.append({
             'priority': 'MITTEL',
-            'finding': f'Champion-Anteil zu niedrig: nur {champion_share:.1%} der Kunden sind Top-Käufer ({champion_count} Personen).',
+            'finding': f'{len(significant_declining)} Produkte zeigen ≥3 Monate rückläufigen Umsatz und Monatsumsatz < 50% des Produktdurchschnitts.',
+            'decision': 'Sortiment bereinigen: betroffene Produkte prüfen und ggf. absetzen.',
+            'reasoning': f'Betroffene Produkte: {product_list}.',
+        })
+
+    if kpis['champion_share'] < thresholds.champion_share:
+        recommendations.append({
+            'priority': 'MITTEL',
+            'finding': f"Champion-Anteil zu niedrig: nur {kpis['champion_share']:.1%} der Kunden sind Top-Käufer ({kpis['champion_count']} Personen).",
             'decision': 'Kundenbindungsprogramm aufbauen: Loyal-Kunden aktiv zu Champions entwickeln.',
             'reasoning': 'Ein gesunder Kundenstamm hat typischerweise 15–25% Champions. Darunter fehlt die Basis für stabile Wiederholungsumsätze.',
         })
 
-    new_share = (rfm_df['segment'] == 'New').sum() / len(rfm_df)
-    if new_share < thresholds.new_customer_share:
-        new_count = (rfm_df['segment'] == 'New').sum()
+    if kpis['new_share'] < thresholds.new_customer_share:
         recommendations.append({
             'priority': 'MITTEL',
-            'finding': f'Neukunden-Anteil kritisch niedrig: nur {new_share:.1%} der Kunden sind Neukunden ({new_count} Personen).',
+            'finding': f"Neukunden-Anteil kritisch niedrig: nur {kpis['new_share']:.1%} der Kunden sind Neukunden ({kpis['new_count']} Personen).",
             'decision': 'Neukundenakquisition prüfen: Marketing-Kanäle und Erstbestellangebote ausbauen.',
             'reasoning': 'Ohne kontinuierlichen Neukunden-Zufluss schrumpft der Kundenstamm langfristig, da bestehende Kunden natürlich abwandern.',
         })
 
-    if len(rfm_df) >= 5:
-        top_n = max(1, int(len(rfm_df) * 0.2))
-        sorted_monetary = rfm_df['monetary'].sort_values(ascending=False)
-        top20_share = sorted_monetary.head(top_n).sum() / sorted_monetary.sum()
-        if top20_share > thresholds.top_customer_revenue_share:
-            recommendations.append({
-                'priority': 'MITTEL',
-                'finding': f'Klumpenrisiko: Top 20% der Kunden generieren {top20_share:.0%} des Umsatzes.',
-                'decision': 'Kundenstamm diversifizieren: Abhängigkeit von wenigen Schlüsselkunden reduzieren.',
-                'reasoning': 'Hohe Umsatzkonzentration bedeutet hohes Risiko — der Verlust weniger Grosskunden kann den Gesamtumsatz stark beeinflussen.',
-            })
+    if kpis['top20_share'] > thresholds.top_customer_revenue_share:
+        recommendations.append({
+            'priority': 'MITTEL',
+            'finding': f"Klumpenrisiko: Top 20% der Kunden generieren {kpis['top20_share']:.0%} des Umsatzes.",
+            'decision': 'Kundenstamm diversifizieren: Abhängigkeit von wenigen Schlüsselkunden reduzieren.',
+            'reasoning': 'Hohe Umsatzkonzentration bedeutet hohes Risiko — der Verlust weniger Grosskunden kann den Gesamtumsatz stark beeinflussen.',
+        })
 
     if not recommendations:
-        champion_share = (rfm_df['segment'] == 'Champions').sum() / len(rfm_df) if len(rfm_df) > 0 else 0
+        pct_str = f"{pct_change:+.1%}" if pct_change is not None else "n/a"
         recommendations.append({
             'priority': 'TIEF',
-            'finding': f'Forecast: {pct_change:+.1%}. Champion-Anteil: {champion_share:.1%}.',
+            'finding': f"Forecast: {pct_str}. Champion-Anteil: {kpis['champion_share']:.1%}.",
             'decision': 'Kein unmittelbarer Handlungsbedarf.',
             'reasoning': 'Alle KPIs im grünen Bereich. Reguläre Erfolgskontrolle genügt.',
         })

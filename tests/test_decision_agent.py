@@ -1,5 +1,10 @@
 import pandas as pd
-from src.decision_agent import AgentThresholds, generate_agent_run, generate_recommendations
+from src.decision_agent import (
+    AgentThresholds,
+    compute_agent_kpis,
+    generate_agent_run,
+    generate_recommendations,
+)
 
 def make_forecast_decline():
     return pd.DataFrame({'ds': pd.date_range('2010-01-01', periods=6, freq='MS'), 'yhat': [1000, 1000, 1000, 850, 900, 950]})
@@ -186,3 +191,30 @@ def test_generate_agent_run_marks_human_approval_optional_for_low_priority():
     )
     assert run['recommendations'][0]['priority'] == 'TIEF'
     assert run['approval_required'] is False
+
+
+def test_compute_agent_kpis_is_single_source_of_truth_for_layers():
+    kpis = compute_agent_kpis(
+        make_forecast_decline(),
+        make_rfm_high_at_risk(),
+        make_declining_products(),
+        actuals_df=make_actuals(),
+    )
+    assert kpis['customer_count'] == 100
+    assert kpis['at_risk_count'] == 25
+    assert kpis['at_risk_share'] == 0.25
+    assert kpis['champion_count'] == 75
+    assert kpis['forecast']['baseline'] == 1000
+    assert len(kpis['significant_declining']) == 1
+
+
+def test_generate_agent_run_passes_kpis_consistently_to_recommendations_and_evidence():
+    run = generate_agent_run(
+        make_forecast_decline(),
+        make_rfm_high_at_risk(),
+        make_declining_products(),
+        actuals_df=make_actuals(),
+    )
+    assert run['evidence']['at_risk_count'] == 25
+    assert run['evidence']['at_risk_share'] == 0.25
+    assert any('25 Kunden' in r['reasoning'] for r in run['recommendations'])
