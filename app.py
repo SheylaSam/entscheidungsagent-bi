@@ -10,6 +10,7 @@ from src.forecasting import load_forecast, run_backtest
 from src.product_analysis import load_product_analysis
 from src.customer_analysis import load_primary_customer_country, summarize_segments_by_country
 from src.decision_agent import generate_recommendations, generate_agent_run
+from src.decision_log import list_agent_runs, log_agent_run
 
 st.set_page_config(page_title="RetailBI — Entscheidungsagent", layout="wide")
 
@@ -904,6 +905,10 @@ with tab5:
         actuals_df=actuals,
         comparison_value=_last,
     )
+    try:
+        log_agent_run(agent_run)
+    except OSError:
+        pass
 
     render_decision_panel(live_recs[0], "Agenten-Empfehlung")
     render_evidence_strip([
@@ -1050,3 +1055,24 @@ with tab5:
             use_container_width=True,
             hide_index=True,
         )
+
+    persisted_runs = list_agent_runs(limit=10)
+    if persisted_runs:
+        with st.expander(f"Persistierte Agent-Runs ({len(persisted_runs)})", expanded=False):
+            st.caption(
+                "Jeder Agent-Lauf wird unter `logs/agent_runs/<run_id>.json` archiviert — "
+                "Empfehlung, Evidence, Trace und Guardrails bleiben so nachvollziehbar."
+            )
+            st.dataframe(
+                pd.DataFrame([
+                    {
+                        'run_id': r['run_id'],
+                        'priorität': r['top_priority'],
+                        'empfehlungen': r['recommendation_count'],
+                        'freigabe nötig': r['approval_required'],
+                    }
+                    for r in persisted_runs
+                ]),
+                use_container_width=True,
+                hide_index=True,
+            )

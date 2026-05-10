@@ -8,3 +8,4 @@ data/retail.db
 .planning/
 .playwright-mcp/
 screenshot-*.png
+logs/

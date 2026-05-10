@@ -1,5 +1,5 @@
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timezone
 
 from src.semantic import AgentThresholds  # re-exported for backward compatibility
 
@@ -204,7 +204,7 @@ def build_agent_run(
 
     approval_required = any(g['name'] == 'Human-in-the-Loop' and g['status'] == 'required' for g in guardrails)
     return {
-        'run_id': datetime.utcnow().strftime('%Y%m%d%H%M%S'),
+        'run_id': datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f'),
         'goal': 'Priorisierte BI-Entscheidung fuer Management vorbereiten',
         'agent_type': 'Regelbasierter BI-Agent mit Human-in-the-Loop',
         'recommendations': recommendations,
