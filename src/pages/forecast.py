@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from src.ui import theme
+from src.ui.agent_panel import agent_recommendation_card
 from src.ui.legacy_renderers import render_decision_panel, render_evidence_strip
 from src.ui.page_loader import (
     forecast_baseline, short_baseline_label, load_backtest, load_all,
@@ -79,7 +80,7 @@ def render(filters: dict) -> None:
 
     st.title("Forecast & Umsatzrisiko")
     st.caption("3-Monats-Ausblick mit Unsicherheit und Modellgüte")
-    render_decision_panel(forecast_rec, "Forecast-Interpretation")
+    agent_recommendation_card(forecast_rec)
     render_evidence_strip([
         ("Vergleichsumsatz", f"£{forecast_base_value:,.0f}"),
         ("Prognose nächster Monat", f"£{next_row['yhat']:,.0f}"),
