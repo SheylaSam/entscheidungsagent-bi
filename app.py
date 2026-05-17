@@ -794,10 +794,13 @@ with tab4:
             selection = None
         else:
             fig = px.bar(top_products, x='revenue', y='description', orientation='h',
-                labels={'revenue': 'Umsatz (£)', 'description': ''},
+                labels={'revenue': '', 'description': ''},
                 color='revenue', color_continuous_scale='Blues')
             fig.update_layout(height=380, coloraxis_showscale=False, yaxis={'categoryorder': 'total ascending'})
+            fig = polish(fig, hide_legend=True)
+            fig.update_xaxes(tickformat=',.0f')
             selection = st.plotly_chart(fig, use_container_width=True,
+                                        theme=None, config=PLOTLY_CONFIG,
                                         on_select="rerun", key="top_products_chart")
 
     with col_decline:
@@ -831,8 +834,10 @@ with tab4:
                 markers=True,
             )
             fig_trend.update_traces(line_color='#60a5fa', marker_color='#3b82f6')
-            fig_trend.update_layout(height=300)
-            st.plotly_chart(fig_trend, use_container_width=True)
+            fig_trend.update_layout(height=300, xaxis_title='', yaxis_title='')
+            fig_trend = polish(fig_trend, y_format=',.0f')
+            st.plotly_chart(fig_trend, use_container_width=True,
+                            theme=None, config=PLOTLY_CONFIG)
         else:
             st.info("Keine Monatsdaten für dieses Produkt.")
     else:
@@ -855,8 +860,12 @@ with tab4:
         fig_country.update_layout(
             height=420, coloraxis_showscale=False,
             yaxis={'categoryorder': 'total ascending'},
+            xaxis_title='', yaxis_title='',
         )
-        st.plotly_chart(fig_country, use_container_width=True)
+        fig_country = polish(fig_country, hide_legend=True)
+        fig_country.update_xaxes(tickformat=',.0f')
+        st.plotly_chart(fig_country, use_container_width=True,
+                        theme=None, config=PLOTLY_CONFIG)
 
     with col_country_table:
         display_countries = top_countries.copy()
