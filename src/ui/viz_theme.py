@@ -48,7 +48,7 @@ def _build_template(dark: bool) -> go.layout.Template:
                           color=theme.HEADING if not dark else "#F1F5F9"),
                 x=0, xanchor="left", pad=dict(t=4, b=12),
             ),
-            margin=dict(l=48, r=16, t=40, b=40),
+            margin=dict(l=80, r=16, t=56, b=40),
             colorway=list(theme.CHART_CATEGORICAL),
             xaxis=dict(
                 showgrid=False, zeroline=False, showline=False,
@@ -67,6 +67,7 @@ def _build_template(dark: bool) -> go.layout.Template:
                 xanchor="left", x=0,
                 bgcolor="rgba(0,0,0,0)", bordercolor="rgba(0,0,0,0)",
                 font=dict(color=axis, size=theme.FONT_SIZES_PX["CHART_TICK"]),
+                title=dict(text=""),
             ),
             hovermode="x unified",
             hoverlabel=dict(

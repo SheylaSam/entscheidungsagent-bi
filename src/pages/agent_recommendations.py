@@ -151,7 +151,7 @@ def render(filters: dict) -> None:
         return f'<div style="margin-bottom:6px;font-size:13px;color:#e2e8f0">{icon} {label}: <strong>{actual}</strong> <span style="color:#64748b">(Schwelle: {threshold})</span></div>'
 
     st.markdown('<div class="section-kicker">Regelbelege</div>', unsafe_allow_html=True)
-    st.subheader("Regelstatus")
+    st.subheader("Regelstatus", anchor=False)
 
     col_r1, col_r2, col_r3 = st.columns(3)
 
@@ -208,17 +208,17 @@ def render(filters: dict) -> None:
                 render_decision_panel(rec, "Weitere Empfehlung")
 
     st.divider()
-    st.subheader("Agentic Trace")
+    st.subheader("Agentic Trace", anchor=False)
     st.caption("Planung, Tool-Nutzung und Synthese der aktuellen Empfehlung.")
     render_agent_trace(agent_run['trace'])
 
     col_guard, col_approval = st.columns([1.2, 1])
     with col_guard:
-        st.subheader("Guardrails")
+        st.subheader("Guardrails", anchor=False)
         render_guardrails(agent_run['guardrails'])
 
     with col_approval:
-        st.subheader("Human-in-the-Loop")
+        st.subheader("Human-in-the-Loop", anchor=False)
         if agent_run['approval_required']:
             st.warning("Operative Umsetzung benötigt Management-Freigabe.")
         else:
@@ -260,7 +260,7 @@ def render(filters: dict) -> None:
         )
 
     if st.session_state.get("decision_agent_log"):
-        st.subheader("Entscheidungslog / Memory")
+        st.subheader("Entscheidungslog / Memory", anchor=False)
         log_df = pd.DataFrame(st.session_state["decision_agent_log"])
         st.dataframe(
             log_df[['run_id', 'status', 'priority', 'decision', 'note']],
@@ -291,7 +291,7 @@ def render(filters: dict) -> None:
 
     # ── Lern-Loop / Kritik-Komponente (Russell & Norvig Fig. 2.15, Folie 18) ──
     st.divider()
-    st.subheader("Lern-Loop · Kritik-Komponente")
+    st.subheader("Lern-Loop · Kritik-Komponente", anchor=False)
     st.caption(
         "Liest persistierte Agent-Runs und Entscheidungs-Outcomes und schlägt "
         "Schwellwert-Anpassungen vor. Read-only — Übernahme bleibt manuell."

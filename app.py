@@ -115,6 +115,9 @@ min_product_revenue = st.sidebar.number_input(
     step=100,
     help="Blendet kleine Produktpositionen aus Top-Produkten und Rückgangsliste aus.",
 )
+st.sidebar.caption(
+    "Filtert Kleinst-Positionen (unter dem Wert) aus *Top Produkte* und *Rückläufige Produkte* aus."
+)
 st.sidebar.divider()
 
 

@@ -130,7 +130,7 @@ def render(filters: dict) -> None:
     col_left, col_mid = st.columns([1.35, 1])
 
     with col_left:
-        st.subheader("Umsatztrend")
+        st.subheader("Umsatztrend", anchor=False)
         fig = px.bar(actuals.tail(12), x='ds', y='y', labels={'ds': '', 'y': ''})
         fig.update_layout(height=300)
         fig = polish(fig, y_format=',.0f', hide_legend=True)
@@ -138,14 +138,15 @@ def render(filters: dict) -> None:
                         theme=None, config=PLOTLY_CONFIG)
 
     with col_mid:
-        st.subheader("Kundensegmente")
+        st.subheader("Kundensegmente", anchor=False)
         seg_counts = rfm['segment'].value_counts().reset_index()
         seg_counts.columns = ['Segment', 'Anzahl']
         color_map = {'Champions': '#4ade80', 'Loyal': '#60a5fa', 'At Risk': '#f59e0b',
                      'Lost': '#ef4444', 'New': '#a78bfa', 'Others': '#94a3b8'}
         fig2 = px.bar(seg_counts, x='Anzahl', y='Segment', orientation='h',
                       color='Segment', color_discrete_map=color_map)
-        fig2.update_layout(height=300)
+        fig2.update_layout(height=300, yaxis_title='')
         fig2 = polish(fig2, hide_legend=True)
+        fig2.update_layout(margin=dict(l=90))  # room for "Champions" / "At Risk" labels
         st.plotly_chart(fig2, use_container_width=True,
                         theme=None, config=PLOTLY_CONFIG)

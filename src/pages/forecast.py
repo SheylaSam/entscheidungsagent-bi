@@ -126,7 +126,7 @@ def render(filters: dict) -> None:
 
     # ── Backtest / Modellgüte ────────────────────────────────────────────────
     st.divider()
-    st.subheader("Kann man dem Forecast trauen?")
+    st.subheader("Kann man dem Forecast trauen?", anchor=False)
 
     countries_tuple = tuple(countries) if not isinstance(countries, tuple) else countries
     backtest = load_backtest(start_date, end_date, countries_tuple)
@@ -173,7 +173,7 @@ def render(filters: dict) -> None:
     # ── Saisonalitäts-Decomposition ──────────────────────────────────────────
     if 'trend' in forecast.columns:
         st.divider()
-        st.subheader("Saisonalitäts-Decomposition")
+        st.subheader("Saisonalitäts-Decomposition", anchor=False)
         st.caption("Prophet zerlegt den Forecast in einen Langzeit-Trend. Jahres-Saisonalität wird erst ab 12 vollständigen Monaten modelliert.")
 
         col_trend, col_yearly = st.columns(2)

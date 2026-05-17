@@ -37,7 +37,7 @@ def render(filters: dict) -> None:
     col_top, col_decline = st.columns(2)
 
     with col_top:
-        st.subheader(f"Top {top_n_products} Produkte")
+        st.subheader(f"Top {top_n_products} Produkte", anchor=False)
         if top_products.empty:
             st.info("Keine Produkte erfüllen den gewählten Mindestumsatz.")
             selection = None
@@ -48,12 +48,13 @@ def render(filters: dict) -> None:
             fig.update_layout(height=380, coloraxis_showscale=False, yaxis={'categoryorder': 'total ascending'})
             fig = polish(fig, hide_legend=True)
             fig.update_xaxes(tickformat=',.0f')
+            fig.update_layout(margin=dict(l=220))  # wide left margin for product names
             selection = st.plotly_chart(fig, use_container_width=True,
                                         theme=None, config=PLOTLY_CONFIG,
                                         on_select="rerun", key="top_products_chart")
 
     with col_decline:
-        st.subheader(f"Rückläufige Produkte ({len(declining)})")
+        st.subheader(f"Rückläufige Produkte ({len(declining)})", anchor=False)
         if len(declining) == 0:
             st.success("Keine Produkte mit ≥3 Monaten rückläufigem Umsatz.")
         else:
@@ -74,7 +75,7 @@ def render(filters: dict) -> None:
 
     if selected_product:
         st.divider()
-        st.subheader(f"Monatlicher Umsatz: {selected_product}")
+        st.subheader(f"Monatlicher Umsatz: {selected_product}", anchor=False)
         product_monthly = monthly_product_df[monthly_product_df['description'] == selected_product]
         if not product_monthly.empty:
             fig_trend = px.line(
@@ -94,7 +95,7 @@ def render(filters: dict) -> None:
 
     # ── Umsatz nach Land ──────────────────────────────────────────────────────
     st.divider()
-    st.subheader("Umsatz nach Land")
+    st.subheader("Umsatz nach Land", anchor=False)
     st.caption("Top 15 Länder nach Gesamtumsatz im gewählten Zeitraum.")
 
     top_countries = revenue_by_country_df.head(15).copy()
@@ -113,6 +114,7 @@ def render(filters: dict) -> None:
         )
         fig_country = polish(fig_country, hide_legend=True)
         fig_country.update_xaxes(tickformat=',.0f')
+        fig_country.update_layout(margin=dict(l=140))  # wide left margin for country names
         st.plotly_chart(fig_country, use_container_width=True,
                         theme=None, config=PLOTLY_CONFIG)
 

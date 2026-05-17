@@ -32,25 +32,27 @@ def render(filters: dict) -> None:
     col_scatter, col_table = st.columns([2, 1])
 
     with col_scatter:
+        st.subheader("RFM Scatter — Recency vs. Frequency", anchor=False)
+        st.caption("Blasengrösse = Monetary")
         fig = px.scatter(rfm, x='recency', y='frequency', size='monetary',
             color='segment', color_discrete_map=color_map,
             hover_data=['customer_id', 'monetary'],
-            labels={'recency': 'Recency (Tage)', 'frequency': 'Frequency (Bestellungen)'},
-            title='RFM Scatter — Recency vs. Frequency (Grösse = Monetary)')
+            labels={'recency': 'Recency (Tage)', 'frequency': 'Frequency (Bestellungen)'})
         fig.update_layout(height=400)
         fig = polish(fig)
+        fig.update_layout(margin=dict(t=72))  # extra room above for the legend
         st.plotly_chart(fig, use_container_width=True,
                         theme=None, config=PLOTLY_CONFIG)
 
     with col_table:
-        st.subheader("Segmente Übersicht")
+        st.subheader("Segmente Übersicht", anchor=False)
         summary = (rfm.groupby('segment')
             .agg(Kunden=('customer_id', 'count'), Umsatz=('monetary', 'sum'))
             .reset_index().sort_values('Umsatz', ascending=False))
         summary['Umsatz'] = summary['Umsatz'].map('£{:,.0f}'.format)
         st.dataframe(summary, use_container_width=True, hide_index=True)
 
-        st.subheader("Top At-Risk Kunden")
+        st.subheader("Top At-Risk Kunden", anchor=False)
         at_risk = (
             rfm[rfm['segment'] == 'At Risk']
             [['customer_id', 'recency', 'frequency', 'monetary']]
@@ -63,7 +65,7 @@ def render(filters: dict) -> None:
         st.dataframe(at_risk, use_container_width=True, hide_index=True)
 
     st.divider()
-    st.subheader("Kundensegmente nach Land")
+    st.subheader("Kundensegmente nach Land", anchor=False)
 
     customer_country_df = load_customer_country(start_date, end_date, countries)
     country_seg = summarize_segments_by_country(rfm, customer_country_df)
@@ -89,6 +91,7 @@ def render(filters: dict) -> None:
         )
         fig_c = polish(fig_c, hide_legend=True)
         fig_c.update_xaxes(tickformat='.0%')   # horizontal bar — values are on x; show as percent
+        fig_c.update_layout(margin=dict(l=160))  # wide left margin for long country names
         st.plotly_chart(fig_c, use_container_width=True,
                         theme=None, config=PLOTLY_CONFIG)
 
