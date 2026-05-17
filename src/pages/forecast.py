@@ -225,7 +225,7 @@ def render(filters: dict) -> None:
                 fig_yearly.add_trace(go.Bar(
                     x=monthly_avg['month_name'],
                     y=monthly_avg['yearly'],
-                    marker_color=['#ef4444' if v < 0 else '#4ade80' for v in monthly_avg['yearly']],
+                    marker_color=[theme.NEGATIVE if v < 0 else theme.POSITIVE for v in monthly_avg['yearly']],
                 ))
                 fig_yearly.update_layout(
                     title='Jahreszeitlicher Effekt (Ø pro Monat)', height=300,
