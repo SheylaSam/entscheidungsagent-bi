@@ -760,8 +760,14 @@ with tab3:
             labels={'At_Risk_%': 'At-Risk Anteil', 'country': ''},
             title='At-Risk Anteil pro Land (Top 15, nach % sortiert)',
         )
-        fig_c.update_layout(height=400, xaxis_title='', yaxis_title='')
-        fig_c = polish(fig_c, y_format=',.0f', hide_legend=True)
+        fig_c.update_layout(
+            height=400,
+            xaxis_title='', yaxis_title='',
+            coloraxis_showscale=False,
+            yaxis={'categoryorder': 'total ascending'},
+        )
+        fig_c = polish(fig_c, hide_legend=True)
+        fig_c.update_xaxes(tickformat='.0%')   # horizontal bar — values are on x; show as percent
         st.plotly_chart(fig_c, use_container_width=True,
                         theme=None, config=PLOTLY_CONFIG)
 
