@@ -1,7 +1,5 @@
 """Tests for the config generator. Verifies the produced TOML is valid
 and that key token values from theme.py end up in the right TOML slots."""
-from pathlib import Path
-
 try:
     import tomllib  # py311+
 except ImportError:                              # pragma: no cover
