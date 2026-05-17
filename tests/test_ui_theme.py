@@ -60,7 +60,7 @@ def test_spacing_and_radius_constants_exist():
 
 def test_typography_constants_exist():
     assert theme.FONT_FAMILY.startswith("Inter")
-    assert theme.MONO_FAMILY.startswith("JetBrains")
+    assert "JetBrains" in theme.MONO_FAMILY
     # Size scale roles defined in spec §2.2
     for role in ("PAGE_H1", "CARD_H2", "KPI_NUMBER", "KPI_LABEL",
                  "KPI_DELTA", "BODY", "CHART_TICK", "TABLE_CELL", "FOOTNOTE"):

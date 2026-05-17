@@ -64,8 +64,8 @@ FONT_FAMILY = (
     '"Segoe UI", Roboto, system-ui, sans-serif'
 )
 MONO_FAMILY = (
-    "JetBrains Mono, ui-monospace, SFMono-Regular, "
-    "Menlo, Consolas, monospace"
+    '"JetBrains Mono", ui-monospace, SFMono-Regular, '
+    'Menlo, Consolas, monospace'
 )
 HEADING_FAMILY = FONT_FAMILY  # Inter covers both; one family by design
 
