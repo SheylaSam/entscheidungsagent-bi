@@ -90,3 +90,85 @@ JETBRAINS_MONO_URL = (
     "https://fonts.googleapis.com/css2?"
     "family=JetBrains+Mono:wght@400;500&display=swap"
 )
+
+
+# ── Global CSS injection ────────────────────────────────────────────────────
+def global_css() -> str:
+    """Return the complete <style> block to inject once per page.
+
+    Sources two Google Fonts (Inter, JetBrains Mono), forces tabular
+    figures wherever numbers appear, sets card padding/border tokens,
+    hides the default Streamlit chrome (footer/main-menu), and defines
+    the .kpi-* class hierarchy used by src/ui/cards.py.
+    """
+    return f"""
+<style>
+@import url("{INTER_URL}");
+@import url("{JETBRAINS_MONO_URL}");
+
+/* ── Page chrome ──────────────────────────────────────────────── */
+.block-container {{
+    padding-top: 2rem;
+    padding-bottom: 4rem;
+    max-width: {PAGE_MAX_WIDTH_PX}px;
+}}
+#MainMenu, footer {{ visibility: hidden; }}
+
+/* ── Tabular figures everywhere numbers live ──────────────────── */
+.kpi-number, .stDataFrame td, [data-testid="stMetricValue"] {{
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "cv11" 1;
+}}
+
+/* ── KPI card layout (used by src/ui/cards.kpi_card) ──────────── */
+div[data-testid="stVerticalBlockBorderWrapper"]:has(.kpi-card) {{
+    border: 1px solid {BORDER};
+    border-radius: {CARD_RADIUS_REM};
+    padding: {CARD_PADDING_PX}px;
+    background: {BG_PAGE};
+}}
+.kpi-card {{
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}}
+.kpi-label {{
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: {MUTED};
+    font-family: {FONT_FAMILY};
+    font-size: {FONT_SIZES_PX["KPI_LABEL"]}px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}}
+.kpi-tooltip {{
+    color: {FAINT};
+    cursor: help;
+    font-size: {FONT_SIZES_PX["KPI_LABEL"]}px;
+}}
+.kpi-number {{
+    color: {HEADING};
+    font-family: {FONT_FAMILY};
+    font-size: {FONT_SIZES_PX["KPI_NUMBER"]}px;
+    font-weight: 600;
+    line-height: 1.1;
+    margin-top: 2px;
+}}
+.kpi-delta {{
+    font-family: {FONT_FAMILY};
+    font-size: {FONT_SIZES_PX["KPI_DELTA"]}px;
+    font-weight: 500;
+    margin-bottom: 4px;
+}}
+.kpi-delta.is-muted {{ color: {MUTED}; }}
+.kpi-delta-period {{ color: {MUTED}; margin-left: 6px; font-weight: 400; }}
+</style>
+""".strip()
+
+
+def inject_global_css() -> None:
+    """Call once near the top of the Streamlit script."""
+    import streamlit as st  # imported lazily so tests can import this module
+    st.markdown(global_css(), unsafe_allow_html=True)

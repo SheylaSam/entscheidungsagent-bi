@@ -65,3 +65,33 @@ def test_typography_constants_exist():
     for role in ("PAGE_H1", "CARD_H2", "KPI_NUMBER", "KPI_LABEL",
                  "KPI_DELTA", "BODY", "CHART_TICK", "TABLE_CELL", "FOOTNOTE"):
         assert role in theme.FONT_SIZES_PX, f"missing size for role {role}"
+
+
+def test_inject_global_css_returns_a_style_block():
+    css = theme.global_css()
+    assert "<style>" in css and "</style>" in css
+
+
+def test_global_css_imports_inter_font():
+    css = theme.global_css()
+    assert "Inter" in css
+    assert "fonts.googleapis.com" in css
+
+
+def test_global_css_enables_tabular_nums_on_kpi_class():
+    css = theme.global_css()
+    assert ".kpi-number" in css
+    assert "tabular-nums" in css
+
+
+def test_global_css_defines_kpi_label_delta_classes():
+    css = theme.global_css()
+    for cls in (".kpi-label", ".kpi-number", ".kpi-delta", ".kpi-card"):
+        assert cls in css, f"missing rule for {cls}"
+
+
+def test_global_css_uses_token_values():
+    css = theme.global_css()
+    assert theme.MUTED in css
+    assert theme.HEADING in css
+    assert theme.BORDER in css
