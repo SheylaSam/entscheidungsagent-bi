@@ -7,6 +7,7 @@ from __future__ import annotations
 import plotly.express as px
 import streamlit as st
 
+from src.ui import theme
 from src.ui.legacy_renderers import render_decision_panel, render_evidence_strip
 from src.ui.page_loader import load_monthly_product, load_revenue_by_country
 from src.ui.viz_theme import polish, PLOTLY_CONFIG
@@ -38,20 +39,43 @@ def render(filters: dict) -> None:
 
     with col_top:
         st.subheader(f"Top {top_n_products} Produkte", anchor=False)
-        if top_products.empty:
+        if len(top_products) == 0:
             st.info("Keine Produkte erfüllen den gewählten Mindestumsatz.")
             selection = None
         else:
-            fig = px.bar(top_products, x='revenue', y='description', orientation='h',
+            # Selection lives in session_state (set by the previous chart event).
+            selected_product = None
+            sel_state = st.session_state.get("top_products_chart")
+            if sel_state and sel_state.get("selection", {}).get("points"):
+                selected_product = sel_state["selection"]["points"][0].get("y")
+
+            # Fall back to highlighting the top-1 bar when nothing is selected.
+            if selected_product is None and len(top_products) > 0:
+                top_idx = top_products['revenue'].idxmax()
+                selected_product = top_products.loc[top_idx, 'description']
+
+            bar_colors = [
+                theme.CHART_HERO if name == selected_product else theme.MUTED
+                for name in top_products['description']
+            ]
+
+            fig = px.bar(
+                top_products, x='revenue', y='description', orientation='h',
                 labels={'revenue': '', 'description': ''},
-                color='revenue', color_continuous_scale='Blues')
-            fig.update_layout(height=380, coloraxis_showscale=False, yaxis={'categoryorder': 'total ascending'})
+            )
+            fig.update_traces(marker_color=bar_colors)
+            fig.update_layout(
+                height=380,
+                yaxis={'categoryorder': 'total ascending'},
+            )
             fig = polish(fig, hide_legend=True)
             fig.update_xaxes(tickformat=',.0f')
-            fig.update_layout(margin=dict(l=220))  # wide left margin for product names
-            selection = st.plotly_chart(fig, use_container_width=True,
-                                        theme=None, config=PLOTLY_CONFIG,
-                                        on_select="rerun", key="top_products_chart")
+            fig.update_layout(margin=dict(l=220))
+            selection = st.plotly_chart(
+                fig, use_container_width=True,
+                theme=None, config=PLOTLY_CONFIG,
+                on_select="rerun", key="top_products_chart",
+            )
 
     with col_decline:
         st.subheader(f"Rückläufige Produkte ({len(declining)})", anchor=False)
@@ -83,7 +107,7 @@ def render(filters: dict) -> None:
                 labels={'month': 'Monat', 'revenue': 'Umsatz (£)'},
                 markers=True,
             )
-            fig_trend.update_traces(line_color='#60a5fa', marker_color='#3b82f6')
+            fig_trend.update_traces(line_color=theme.CHART_HERO, marker_color=theme.CHART_HERO)
             fig_trend.update_layout(height=300, xaxis_title='', yaxis_title='')
             fig_trend = polish(fig_trend, y_format=',.0f')
             st.plotly_chart(fig_trend, use_container_width=True,
@@ -104,17 +128,18 @@ def render(filters: dict) -> None:
     with col_country_chart:
         fig_country = px.bar(
             top_countries, x='revenue', y='country', orientation='h',
-            labels={'revenue': 'Umsatz (£)', 'country': ''},
-            color='revenue', color_continuous_scale='Blues',
+            labels={'revenue': '', 'country': ''},
+            title='Top 15 Länder nach Gesamtumsatz im gewählten Zeitraum',
         )
+        fig_country.update_traces(marker_color=theme.CHART_HERO)
         fig_country.update_layout(
-            height=420, coloraxis_showscale=False,
-            yaxis={'categoryorder': 'total ascending'},
+            height=420,
             xaxis_title='', yaxis_title='',
+            yaxis={'categoryorder': 'total ascending'},
         )
         fig_country = polish(fig_country, hide_legend=True)
         fig_country.update_xaxes(tickformat=',.0f')
-        fig_country.update_layout(margin=dict(l=140))  # wide left margin for country names
+        fig_country.update_layout(margin=dict(l=140))
         st.plotly_chart(fig_country, use_container_width=True,
                         theme=None, config=PLOTLY_CONFIG)
 
