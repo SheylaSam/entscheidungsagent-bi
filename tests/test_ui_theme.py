@@ -129,3 +129,14 @@ def test_global_css_agent_marker_uses_ai_accent():
     css = theme.global_css()
     assert theme.AI_ACCENT in css
     assert "4px" in css  # border-left width
+
+
+def test_global_css_styles_chat_assistant_bubble():
+    css = theme.global_css()
+    assert "chatAvatarIcon-assistant" in css
+    assert theme.AI_BG_TINT in css
+
+
+def test_global_css_defines_suggestion_chip_class():
+    css = theme.global_css()
+    assert ".chat-suggestion-chip" in css

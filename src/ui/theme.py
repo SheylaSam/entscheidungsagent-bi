@@ -236,6 +236,38 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(.kpi-card) {{
     font-size: 11px;
     margin-top: 10px;
 }}
+
+/* ── Chat bubbles ─────────────────────────────────────────────── */
+[data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-assistant"]) {{
+    background: {AI_BG_TINT};
+    border-left: 3px solid {AI_ACCENT};
+    border-radius: {CARD_RADIUS_REM};
+    padding: 12px 16px;
+    margin-bottom: 8px;
+}}
+[data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) {{
+    background: {BG_CARD};
+    border-radius: {CARD_RADIUS_REM};
+    padding: 12px 16px;
+    margin-bottom: 8px;
+}}
+
+/* ── Suggestion-chip buttons above the chat input ─────────────── */
+.chat-suggestion-chip > button {{
+    background: {BG_PAGE} !important;
+    border: 1px solid {BORDER} !important;
+    color: {BODY} !important;
+    font-family: {FONT_FAMILY} !important;
+    font-size: 13px !important;
+    padding: 6px 14px !important;
+    border-radius: 999px !important;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}}
+.chat-suggestion-chip > button:hover {{
+    background: {AI_BG_TINT} !important;
+    border-color: {AI_ACCENT} !important;
+    color: {AI_ACCENT} !important;
+}}
 </style>
 """.strip()
 
