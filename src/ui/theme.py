@@ -35,6 +35,20 @@ INFO = "#2563EB"
 AI_ACCENT = "#7C3AED"
 AI_BG_TINT = "#F5F3FF"
 
+# ── RFM segment semantics ───────────────────────────────────────────────────
+# Maps each RFM segment to a semantic color used by Overview's
+# Kundensegmente chart and the Kunden page.  Charts get gray bars with
+# colored accents on Champions/Loyal (positive) and At Risk/Lost
+# (negative); Others/New are neutral.
+SEGMENT_SEMANTICS: dict[str, str] = {
+    "Champions": POSITIVE,
+    "Loyal":     POSITIVE,
+    "At Risk":   NEGATIVE,
+    "Lost":      NEGATIVE,
+    "Others":    MUTED,
+    "New":       MUTED,
+}
+
 # ── Chart categorical palette (Okabe-Ito, colorblind-safe, max 6) ───────────
 CHART_HERO = "#0072B2"
 CHART_CATEGORICAL: tuple[str, ...] = (

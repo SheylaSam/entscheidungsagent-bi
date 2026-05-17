@@ -95,3 +95,24 @@ def test_global_css_uses_token_values():
     assert theme.MUTED in css
     assert theme.HEADING in css
     assert theme.BORDER in css
+
+
+def test_segment_semantics_has_known_segments():
+    expected_segments = {"Champions", "Loyal", "At Risk", "Lost", "New", "Others"}
+    assert set(theme.SEGMENT_SEMANTICS.keys()) >= expected_segments
+
+
+def test_segment_semantics_maps_to_token_colors():
+    valid = {theme.POSITIVE, theme.NEGATIVE, theme.MUTED, theme.FAINT}
+    for seg, color in theme.SEGMENT_SEMANTICS.items():
+        assert color in valid, f"{seg!r} → {color!r} not in {valid}"
+
+
+def test_champions_and_loyal_are_positive():
+    assert theme.SEGMENT_SEMANTICS["Champions"] == theme.POSITIVE
+    assert theme.SEGMENT_SEMANTICS["Loyal"] == theme.POSITIVE
+
+
+def test_at_risk_and_lost_are_negative():
+    assert theme.SEGMENT_SEMANTICS["At Risk"] == theme.NEGATIVE
+    assert theme.SEGMENT_SEMANTICS["Lost"] == theme.NEGATIVE
