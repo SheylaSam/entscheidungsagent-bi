@@ -13,6 +13,7 @@ from src.decision_agent import generate_recommendations, generate_agent_run
 from src.decision_log import list_agent_runs, log_agent_run, log_decision_outcome
 from src.critic import analyze_decision_history
 from src.agent_chat import AAIAgent, AgentContext, OllamaNotAvailable
+from src.ui.viz_theme import polish, PLOTLY_CONFIG
 
 st.set_page_config(page_title="RetailBI — Entscheidungsagent", layout="wide")
 
@@ -496,10 +497,11 @@ with tab1:
 
     with col_left:
         st.subheader("Umsatztrend")
-        fig = px.bar(actuals.tail(12), x='ds', y='y', labels={'ds': '', 'y': 'Umsatz (£)'})
-        fig.update_traces(marker_color='#60a5fa')
-        fig.update_layout(height=300, margin=dict(t=10, b=0), showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
+        fig = px.bar(actuals.tail(12), x='ds', y='y', labels={'ds': '', 'y': ''})
+        fig.update_layout(height=300)
+        fig = polish(fig, y_format=',.0f', hide_legend=True)
+        st.plotly_chart(fig, use_container_width=True,
+                        theme=None, config=PLOTLY_CONFIG)
 
     with col_mid:
         st.subheader("Kundensegmente")
@@ -509,8 +511,10 @@ with tab1:
                      'Lost': '#ef4444', 'New': '#a78bfa', 'Others': '#94a3b8'}
         fig2 = px.bar(seg_counts, x='Anzahl', y='Segment', orientation='h',
                       color='Segment', color_discrete_map=color_map)
-        fig2.update_layout(height=300, margin=dict(t=10, b=0), showlegend=False)
-        st.plotly_chart(fig2, use_container_width=True)
+        fig2.update_layout(height=300)
+        fig2 = polish(fig2, hide_legend=True)
+        st.plotly_chart(fig2, use_container_width=True,
+                        theme=None, config=PLOTLY_CONFIG)
 
 # ── Tab 2 ────────────────────────────────────────────────────────────────────
 with tab2:
