@@ -15,11 +15,11 @@ from src.critic import analyze_decision_history
 from src.decision_agent import generate_recommendations, generate_agent_run
 from src.decision_log import list_agent_runs, log_agent_run, log_decision_outcome
 from src.ui.legacy_renderers import (
-    render_decision_panel,
     render_evidence_strip,
     render_agent_trace,
     render_guardrails,
 )
+from src.ui.agent_panel import agent_recommendation_card
 from src.ui.cards import kpi_card
 from src.ui.page_loader import forecast_baseline, short_baseline_label, _json_default
 
@@ -122,7 +122,7 @@ def render(filters: dict) -> None:
     except OSError:
         pass
 
-    render_decision_panel(live_recs[0], "Agenten-Empfehlung")
+    agent_recommendation_card(live_recs[0])
     render_evidence_strip([
         ("Vergleichsumsatz", f"£{_last:,.0f}"),
         ("Prognose nächster Monat", f"£{_next:,.0f}"),
@@ -206,7 +206,7 @@ def render(filters: dict) -> None:
     if len(live_recs) > 1:
         with st.expander("Weitere Empfehlungen", expanded=False):
             for rec in live_recs[1:]:
-                render_decision_panel(rec, "Weitere Empfehlung")
+                agent_recommendation_card(rec, variant='compact')
 
     st.divider()
     st.subheader("Agentic Trace", anchor=False)
