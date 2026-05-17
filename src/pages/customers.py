@@ -8,6 +8,7 @@ import plotly.express as px
 import streamlit as st
 
 from src.customer_analysis import summarize_segments_by_country
+from src.ui import theme
 from src.ui.legacy_renderers import render_decision_panel, render_evidence_strip
 from src.ui.page_loader import load_all, load_customer_country
 from src.ui.viz_theme import polish, PLOTLY_CONFIG
@@ -91,21 +92,20 @@ def render(filters: dict) -> None:
                  .sort_values('At_Risk_%', ascending=False)
                  .head(15))
         fig_c = px.bar(
-            top_n, x='At_Risk_%', y='country', orientation='h',
-            color='At_Risk_%',
-            color_continuous_scale='Reds',
+            top_n,
+            x='At_Risk_%', y='country', orientation='h',
             labels={'At_Risk_%': 'At-Risk Anteil', 'country': ''},
             title='At-Risk Anteil pro Land (Top 15, nach % sortiert)',
         )
+        fig_c.update_traces(marker_color=theme.CHART_HERO)
         fig_c.update_layout(
             height=400,
             xaxis_title='', yaxis_title='',
-            coloraxis_showscale=False,
             yaxis={'categoryorder': 'total ascending'},
         )
         fig_c = polish(fig_c, hide_legend=True)
-        fig_c.update_xaxes(tickformat='.0%')   # horizontal bar — values are on x; show as percent
-        fig_c.update_layout(margin=dict(l=160))  # wide left margin for long country names
+        fig_c.update_xaxes(tickformat='.0%')
+        fig_c.update_layout(margin=dict(l=160))
         st.plotly_chart(fig_c, use_container_width=True,
                         theme=None, config=PLOTLY_CONFIG)
 
