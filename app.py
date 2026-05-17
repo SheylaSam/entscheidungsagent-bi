@@ -10,7 +10,9 @@ from src.forecasting import load_forecast, run_backtest
 from src.product_analysis import load_product_analysis
 from src.customer_analysis import load_primary_customer_country, summarize_segments_by_country
 from src.decision_agent import generate_recommendations, generate_agent_run
-from src.decision_log import list_agent_runs, log_agent_run
+from src.decision_log import list_agent_runs, log_agent_run, log_decision_outcome
+from src.critic import analyze_decision_history
+from src.agent_chat import AAIAgent, AgentContext, OllamaNotAvailable
 
 st.set_page_config(page_title="RetailBI — Entscheidungsagent", layout="wide")
 
@@ -348,14 +350,33 @@ def priority_meta(priority: str) -> dict:
     }.get(priority, {'accent': '#94a3b8', 'label': priority})
 
 
+def format_utility(rec: dict) -> str:
+    utility = rec.get('utility', 0.0)
+    if utility <= 0:
+        return ""
+    comps = rec.get('utility_components', {})
+    return (
+        f"Utility ≈ £{utility:,.0f} "
+        f"(Impact £{comps.get('expected_impact_gbp', 0):,.0f} × "
+        f"Dringlichkeit {comps.get('urgency', 0):.1f} × "
+        f"Konfidenz {comps.get('confidence', 0):.1f})"
+    )
+
+
 def render_decision_panel(rec: dict, eyebrow: str = "Management-Entscheid") -> None:
     meta = priority_meta(rec['priority'])
+    utility_line = format_utility(rec)
+    utility_html = (
+        f'<div class="decision-body"><strong>Nutzen:</strong> {utility_line}</div>'
+        if utility_line else ''
+    )
     st.markdown(f"""
     <div class="decision-panel" style="--accent:{meta['accent']}">
         <div class="decision-kicker">{eyebrow} · {meta['label']}</div>
         <div class="decision-title">{rec['decision']}</div>
         <div class="decision-body"><strong>Befund:</strong> {rec['finding']}</div>
         <div class="decision-body"><strong>Begründung:</strong> {rec['reasoning']}</div>
+        {utility_html}
     </div>
     """, unsafe_allow_html=True)
 
@@ -375,10 +396,16 @@ def render_action_list(recommendations: list[dict]) -> None:
     cards = ''
     for rec in recommendations:
         meta = priority_meta(rec['priority'])
+        utility = rec.get('utility', 0.0)
+        utility_badge = (
+            f'<div style="color:#94a3b8;font-size:11px;margin-top:6px;">'
+            f'Utility ≈ £{utility:,.0f}</div>'
+        ) if utility > 0 else ''
         cards += (
             f'<div class="action-item" style="--accent:{meta["accent"]}">'
             f'<div class="action-priority">{meta["label"]}</div>'
             f'<div>{rec["decision"]}</div>'
+            f'{utility_badge}'
             '</div>'
         )
     st.markdown(f'<div class="action-list">{cards}</div>', unsafe_allow_html=True)
@@ -428,8 +455,8 @@ def short_baseline_label(label: str) -> str:
         return "Ø letzte 3 Monate"
     return "Letzter Ist-Monat"
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "Übersicht", "Forecast", "Kunden RFM", "Produkte", "KI-Entscheid"
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "Übersicht", "Forecast", "Kunden RFM", "Produkte", "KI-Entscheid", "Chat-Agent"
 ])
 
 # ── Tab 1 ────────────────────────────────────────────────────────────────────
@@ -1038,7 +1065,8 @@ with tab5:
                 'evidence': agent_run['evidence'],
             }
             st.session_state[log_key].insert(0, entry)
-            st.success("Entscheidung wurde im Session-Memory protokolliert.")
+            log_decision_outcome(agent_run['run_id'], selected_status, note)
+            st.success("Entscheidung wurde im Session-Memory protokolliert und für den Lern-Loop gespeichert.")
 
         st.download_button(
             "Agent Run als JSON exportieren",
@@ -1076,3 +1104,103 @@ with tab5:
                 use_container_width=True,
                 hide_index=True,
             )
+
+    # ── Lern-Loop / Kritik-Komponente (Russell & Norvig Fig. 2.15, Folie 18) ──
+    st.divider()
+    st.subheader("Lern-Loop · Kritik-Komponente")
+    st.caption(
+        "Liest persistierte Agent-Runs und Entscheidungs-Outcomes und schlägt "
+        "Schwellwert-Anpassungen vor. Read-only — Übernahme bleibt manuell."
+    )
+    critique = analyze_decision_history()
+    col_c1, col_c2, col_c3 = st.columns(3)
+    with col_c1:
+        st.metric("Agent-Läufe gesamt", critique['run_count'])
+    with col_c2:
+        st.metric("Mit Outcome", critique['outcome_count'])
+    with col_c3:
+        approval_rate = critique['approval_rate']
+        st.metric(
+            "Freigabe-Quote",
+            f"{approval_rate:.0%}" if approval_rate is not None else "n/a",
+        )
+
+    if critique['priority_distribution']:
+        st.write("**Verteilung der Top-Prioritäten:**")
+        st.dataframe(
+            pd.DataFrame(
+                [{'Priorität': k, 'Anzahl': v} for k, v in critique['priority_distribution'].items()]
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    if critique['suggestions']:
+        st.write("**Vorschläge des Kritik-Agents:**")
+        for s in critique['suggestions']:
+            if s['threshold']:
+                st.warning(
+                    f"**{s['threshold']}**: aktuell `{s['current_default']}`, "
+                    f"vorgeschlagen `{s['suggested']}`.  \n{s['reasoning']}"
+                )
+            else:
+                st.info(s['reasoning'])
+    elif critique['run_count'] >= 3:
+        st.success("Keine Anpassungen nötig — Schwellwerte produzieren akzeptierte Empfehlungen.")
+    else:
+        st.info(
+            f"Noch zu wenig Datenbasis für Vorschläge "
+            f"(mindestens 3 Läufe + Outcomes nötig, aktuell {critique['run_count']} Läufe / "
+            f"{critique['outcome_count']} Outcomes)."
+        )
+
+
+# ── Tab 6: Chat-Agent ────────────────────────────────────────────────────────
+with tab6:
+    st.title("Chat-Agent")
+    st.caption(
+        "Natürlichsprachlicher Layer mit Tool-Calling (Ollama lokal). "
+        "Der LLM wählt ein Tool, ruft die deterministische BI-Logik auf und antwortet auf Deutsch."
+    )
+
+    with st.expander("Setup-Hinweis", expanded=False):
+        st.markdown(
+            "1. Ollama installieren: <https://ollama.com>\n"
+            "2. Modell laden: `ollama pull llama3.2`\n"
+            "3. Python-Paket: `pip install ollama`\n"
+            "4. Ollama läuft als Hintergrunddienst — keine API-Keys nötig."
+        )
+
+    model_name = st.text_input("Ollama-Modell", value="llama3.2")
+    user_question = st.text_area(
+        "Frage an den Agent",
+        placeholder="z.B. Was sollten wir diesen Monat tun? — Welche Produkte gehen zurück? — Wie ist der Forecast?",
+        key="chat_question",
+    )
+
+    if st.button("Frage absenden", type="primary"):
+        if not user_question.strip():
+            st.warning("Bitte eine Frage eingeben.")
+        else:
+            agent_ctx = AgentContext(
+                forecast_df=forecast,
+                rfm_df=rfm,
+                declining_df=declining,
+                actuals_df=actuals,
+                comparison_value=agent_forecast_base,
+            )
+            agent = AAIAgent(agent_ctx, model=model_name)
+            try:
+                with st.spinner("Agent denkt nach…"):
+                    result = agent.chat(user_question)
+            except OllamaNotAvailable as exc:
+                st.error(str(exc))
+            except Exception as exc:
+                st.error(f"Ollama-Fehler: {exc}")
+            else:
+                st.markdown("### Antwort")
+                st.write(result.answer)
+                with st.expander("Agent-Trace (Think → Act → Observe → Answer)", expanded=False):
+                    for step in result.trace:
+                        st.markdown(f"**{step['step'].upper()}**")
+                        st.json({k: v for k, v in step.items() if k != 'step'})

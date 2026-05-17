@@ -31,7 +31,7 @@ def test_log_agent_run_persists_run_as_json(tmp_path):
     with path.open() as f:
         data = json.load(f)
     assert data['run_id'] == run['run_id']
-    assert data['agent_type'] == 'Regelbasierter BI-Agent mit Human-in-the-Loop'
+    assert data['agent_type'] == 'Utility-basierter BI-Agent mit Human-in-the-Loop'
     assert len(data['recommendations']) == len(run['recommendations'])
 
 

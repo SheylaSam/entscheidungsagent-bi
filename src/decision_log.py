@@ -50,7 +50,10 @@ def list_agent_runs(log_dir: str | Path = DEFAULT_LOG_DIR, limit: int | None = N
     log_dir = Path(log_dir)
     if not log_dir.exists():
         return []
-    paths = sorted(log_dir.glob("*.json"), reverse=True)
+    paths = sorted(
+        (p for p in log_dir.glob("*.json") if not p.name.endswith('.outcome.json')),
+        reverse=True,
+    )
     if limit is not None:
         paths = paths[:limit]
     summaries: list[dict] = []
@@ -79,3 +82,47 @@ def load_agent_run(run_id: str, log_dir: str | Path = DEFAULT_LOG_DIR) -> dict:
     path = Path(log_dir) / f"{run_id}.json"
     with path.open('r', encoding='utf-8') as f:
         return json.load(f)
+
+
+# ── Decision outcomes ────────────────────────────────────────────────────────
+# A separate companion file <run_id>.outcome.json captures the human approval
+# step (Freigegeben/Zurückgestellt/Abgelehnt + note). Splitting it from the run
+# file means the original agent output stays immutable while still being
+# joinable for the Critic / learning loop.
+
+def log_decision_outcome(
+    run_id: str,
+    status: str,
+    note: str = '',
+    log_dir: str | Path = DEFAULT_LOG_DIR,
+) -> Path:
+    """Persist the human-in-the-loop decision for a given run."""
+    log_dir = Path(log_dir)
+    log_dir.mkdir(parents=True, exist_ok=True)
+    path = log_dir / f"{run_id}.outcome.json"
+    payload = {
+        'run_id': run_id,
+        'status': status,
+        'note': note,
+        'logged_at': datetime.now().isoformat(),
+    }
+    with path.open('w', encoding='utf-8') as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False)
+    return path
+
+
+def load_outcomes(log_dir: str | Path = DEFAULT_LOG_DIR) -> dict[str, dict]:
+    """Return {run_id: outcome_dict} for every persisted decision outcome."""
+    log_dir = Path(log_dir)
+    if not log_dir.exists():
+        return {}
+    outcomes: dict[str, dict] = {}
+    for path in log_dir.glob("*.outcome.json"):
+        try:
+            with path.open('r', encoding='utf-8') as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if data.get('run_id'):
+            outcomes[data['run_id']] = data
+    return outcomes

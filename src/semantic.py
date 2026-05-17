@@ -27,6 +27,21 @@ class AgentThresholds:
     top_customer_revenue_share: float = 0.80
 
 
+# ── Utility scoring (utility-based agent — Russell & Norvig, Fig. 2.14) ─────
+# Lifts the agent from goal-based to utility-based: every recommendation
+# carries a numeric score so they can be ranked by expected business value
+# instead of only a categorical HOCH/MITTEL/TIEF label.
+@dataclass(frozen=True)
+class UtilityScore:
+    expected_impact_gbp: float  # annualised revenue (£) at stake
+    urgency: float              # 0..1 — 1.0 = next month, 0.4 = year+
+    confidence: float           # 0..1 — how well the data supports the estimate
+
+    @property
+    def score(self) -> float:
+        return max(0.0, self.expected_impact_gbp) * self.urgency * self.confidence
+
+
 # ── Customer segment definitions (RFM) ───────────────────────────────────────
 # r = recency score 1–5 (5 = most recent), f = frequency score 1–5.
 def assign_segment(row: pd.Series) -> str:
