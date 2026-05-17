@@ -19,16 +19,10 @@ from src.ui import theme as ui_theme
 
 st.set_page_config(page_title="RetailBI — Entscheidungsagent", layout="wide")
 
+ui_theme.inject_global_css()
+
 st.markdown("""
 <style>
-    .block-container { padding-top: 2rem; }
-    [data-testid="stMetric"] {
-        background: #0f172a;
-        border: 1px solid #1e293b;
-        border-radius: 8px;
-        padding: 14px 16px;
-    }
-    [data-testid="stMetricLabel"] { color: #94a3b8; }
     .decision-panel {
         background: #0f172a;
         border: 1px solid #1e293b;
