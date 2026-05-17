@@ -717,8 +717,10 @@ with tab3:
             hover_data=['customer_id', 'monetary'],
             labels={'recency': 'Recency (Tage)', 'frequency': 'Frequency (Bestellungen)'},
             title='RFM Scatter — Recency vs. Frequency (Grösse = Monetary)')
-        fig.update_layout(height=420)
-        st.plotly_chart(fig, use_container_width=True)
+        fig.update_layout(height=400)
+        fig = polish(fig)
+        st.plotly_chart(fig, use_container_width=True,
+                        theme=None, config=PLOTLY_CONFIG)
 
     with col_table:
         st.subheader("Segmente Übersicht")
@@ -758,10 +760,10 @@ with tab3:
             labels={'At_Risk_%': 'At-Risk Anteil', 'country': ''},
             title='At-Risk Anteil pro Land (Top 15, nach % sortiert)',
         )
-        fig_c.update_layout(height=420, coloraxis_showscale=False,
-                            yaxis={'categoryorder': 'total ascending'},
-                            xaxis_tickformat='.0%')
-        st.plotly_chart(fig_c, use_container_width=True)
+        fig_c.update_layout(height=400, xaxis_title='', yaxis_title='')
+        fig_c = polish(fig_c, y_format=',.0f', hide_legend=True)
+        st.plotly_chart(fig_c, use_container_width=True,
+                        theme=None, config=PLOTLY_CONFIG)
 
     with col_ctable:
         display = (country_seg[['country', 'Kunden', 'At_Risk', 'At_Risk_%', 'Umsatz']]
