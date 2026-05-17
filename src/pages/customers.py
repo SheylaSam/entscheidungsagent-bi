@@ -42,15 +42,17 @@ def render(filters: dict) -> None:
         "Bestellung, bezogen auf den jüngsten Datenpunkt 2011-12-09."
     )
 
-    color_map = {'Champions': '#4ade80', 'Loyal': '#60a5fa', 'At Risk': '#f59e0b',
-                 'Lost': '#ef4444', 'New': '#a78bfa', 'Others': '#94a3b8'}
     col_scatter, col_table = st.columns([2, 1])
 
     with col_scatter:
         st.subheader("RFM Scatter — Recency vs. Frequency", anchor=False)
         st.caption("Blasengrösse = Monetary")
+        # RFM scatter is one of the few places categorical color is the point —
+        # use the Okabe-Ito palette so all six segments get a distinct,
+        # colorblind-safe color (and we stop carrying ad-hoc hex codes).
         fig = px.scatter(rfm, x='recency', y='frequency', size='monetary',
-            color='segment', color_discrete_map=color_map,
+            color='segment',
+            color_discrete_sequence=list(theme.CHART_CATEGORICAL),
             hover_data=['customer_id', 'monetary'],
             labels={'recency': 'Recency (Tage)', 'frequency': 'Frequency (Bestellungen)'})
         fig.update_layout(height=400)
