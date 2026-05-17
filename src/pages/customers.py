@@ -9,7 +9,6 @@ import streamlit as st
 
 from src.customer_analysis import summarize_segments_by_country
 from src.ui import theme
-from src.ui.legacy_renderers import render_decision_panel, render_evidence_strip
 from src.ui.page_loader import load_all, load_customer_country
 from src.ui.viz_theme import polish, PLOTLY_CONFIG
 
