@@ -2,6 +2,7 @@ import json
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from src.decision_agent import generate_agent_run
 from src.decision_log import list_agent_runs, load_agent_run, log_agent_run
@@ -79,3 +80,22 @@ def test_load_agent_run_round_trips_a_persisted_run(tmp_path):
     loaded = load_agent_run(run['run_id'], log_dir=tmp_path)
     assert loaded['recommendations'] == run['recommendations']
     assert loaded['guardrails'] == run['guardrails']
+
+
+def test_log_feedback_writes_jsonl(tmp_path):
+    from src.decision_log import log_feedback
+    log_file = tmp_path / "feedback.jsonl"
+    log_feedback("rec-abc", "up", log_path=log_file)
+    log_feedback("rec-abc", "down", log_path=log_file)
+    lines = log_file.read_text().strip().splitlines()
+    assert len(lines) == 2
+    first = json.loads(lines[0])
+    assert first["rec_id"] == "rec-abc"
+    assert first["vote"] == "up"
+    assert "timestamp" in first
+
+
+def test_log_feedback_rejects_unknown_vote(tmp_path):
+    from src.decision_log import log_feedback
+    with pytest.raises(ValueError):
+        log_feedback("rec-1", "maybe", log_path=tmp_path / "feedback.jsonl")

@@ -126,3 +126,38 @@ def load_outcomes(log_dir: str | Path = DEFAULT_LOG_DIR) -> dict[str, dict]:
         if data.get('run_id'):
             outcomes[data['run_id']] = data
     return outcomes
+
+
+def log_feedback(
+    rec_id: str,
+    vote: str,
+    *,
+    log_path: Path | None = None,
+) -> None:
+    """Append one feedback event (👍 / 👎) to the feedback JSONL log.
+
+    Parameters
+    ----------
+    rec_id:
+        Stable recommendation identifier (matches the UI trace-ID).
+    vote:
+        Either ``"up"`` or ``"down"``.
+    log_path:
+        Override the default path (used by tests).  Default writes to
+        ``<DEFAULT_LOG_DIR>/feedback.jsonl`` alongside the existing
+        decision-outcomes log.
+    """
+    if vote not in {"up", "down"}:
+        raise ValueError(f"vote must be 'up' or 'down', got {vote!r}")
+
+    if log_path is None:
+        log_path = DEFAULT_LOG_DIR / "feedback.jsonl"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    record = {
+        "rec_id": rec_id,
+        "vote": vote,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+    with log_path.open("a") as f:
+        f.write(json.dumps(record) + "\n")
