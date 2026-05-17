@@ -10,7 +10,7 @@ import streamlit as st
 
 from src.ui.legacy_renderers import render_decision_panel, render_evidence_strip
 from src.ui.page_loader import (
-    forecast_baseline, short_baseline_label, load_backtest,
+    forecast_baseline, short_baseline_label, load_backtest, load_all,
 )
 from src.ui.viz_theme import polish, PLOTLY_CONFIG
 
@@ -19,14 +19,26 @@ def render(filters: dict) -> None:
     """Render the Forecast page.
 
     Expects in ``filters``:
-        actuals, forecast, forecast_baseline_mode, start_date, end_date, countries
+        forecast_baseline_mode, start_date, end_date, countries
     """
-    actuals                 = filters["actuals"]
-    forecast                = filters["forecast"]
     forecast_baseline_mode  = filters["forecast_baseline_mode"]
+    countries               = filters["countries"]
+    # Backtest still uses the user-selected range — keep these:
     start_date              = filters["start_date"]
     end_date                = filters["end_date"]
-    countries               = filters["countries"]
+
+    # Forecast page intentionally bypasses the global date filter.
+    # Prophet needs the full historical window for a usable model;
+    # restricting it to a short period collapses the trend component.
+    _FULL_START = "2009-12-01"
+    _FULL_END   = "2011-12-09"
+    _, actuals, forecast, *_ = load_all(_FULL_START, _FULL_END, countries)
+
+    st.caption(
+        "Forecast nutzt die volle Datenhistorie 2009–2011 — der globale "
+        "Zeitraum-Slider wirkt hier nicht. Prophet braucht mehr als ein "
+        "halbes Jahr Trainingsdaten, sonst kollabiert die Trend-Komponente."
+    )
 
     # ── lifted body ──────────────────────────────────────────────────────
     future_forecast = forecast[forecast['ds'] > actuals['ds'].max()]
