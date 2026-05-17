@@ -20,6 +20,7 @@ from src.ui.legacy_renderers import (
     render_agent_trace,
     render_guardrails,
 )
+from src.ui.cards import kpi_card
 from src.ui.page_loader import forecast_baseline, short_baseline_label, _json_default
 
 
@@ -299,14 +300,35 @@ def render(filters: dict) -> None:
     critique = analyze_decision_history()
     col_c1, col_c2, col_c3 = st.columns(3)
     with col_c1:
-        st.metric("Agent-Läufe gesamt", critique['run_count'])
+        kpi_card(
+            label="Agent-Läufe gesamt",
+            value=critique['run_count'],
+            value_format="{:,.0f}",
+            delta_pct=None,
+            delta_period="",
+            higher_is_better=True,
+            sparkline=None,
+        )
     with col_c2:
-        st.metric("Mit Outcome", critique['outcome_count'])
+        kpi_card(
+            label="Mit Outcome",
+            value=critique['outcome_count'],
+            value_format="{:,.0f}",
+            delta_pct=None,
+            delta_period="",
+            higher_is_better=True,
+            sparkline=None,
+        )
     with col_c3:
         approval_rate = critique['approval_rate']
-        st.metric(
-            "Freigabe-Quote",
-            f"{approval_rate:.0%}" if approval_rate is not None else "n/a",
+        kpi_card(
+            label="Freigabe-Quote",
+            value=approval_rate,
+            value_format="{:.1%}",
+            delta_pct=None,
+            delta_period="",
+            higher_is_better=True,
+            sparkline=None,
         )
 
     if critique['priority_distribution']:
