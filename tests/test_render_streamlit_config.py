@@ -59,3 +59,13 @@ def test_write_is_idempotent(tmp_path, monkeypatch):
     gen.write()
     second = target.read_text()
     assert first == second
+
+
+def test_committed_config_matches_current_theme():
+    """If this fails, run `make config` and commit the result."""
+    expected = gen.render()
+    actual = (gen.PROJECT_ROOT / ".streamlit" / "config.toml").read_text()
+    assert actual == expected, (
+        "Committed .streamlit/config.toml is out of date.\n"
+        "Run `make config` and commit the regenerated file."
+    )
