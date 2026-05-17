@@ -8,6 +8,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from src.ui import theme
 from src.ui.legacy_renderers import render_decision_panel, render_evidence_strip
 from src.ui.page_loader import (
     forecast_baseline, short_baseline_label, load_backtest, load_all,
@@ -91,17 +92,20 @@ def render(filters: dict) -> None:
     fig = go.Figure()
     fig.add_trace(go.Bar(
         x=chart_history['ds'], y=chart_history['y'],
-        name='Ist-Umsatz', marker_color='#60a5fa',
+        name='Ist-Umsatz',
+        marker_color=theme.CHART_HERO,
         hovertemplate='%{x|%b %Y}<br>Ist: £%{y:,.0f}<extra></extra>',
     ))
     fig.add_trace(go.Bar(
         x=future_forecast['ds'], y=future_forecast['yhat'],
-        name='Forecast', marker_color='#f59e0b',
+        name='Forecast',
+        marker_color=theme.MUTED,
+        marker_pattern_shape='/',    # diagonal stripes mark "not real yet"
         error_y=dict(
             type='data',
             array=(future_forecast['yhat_upper'] - future_forecast['yhat']).clip(lower=0),
             arrayminus=(future_forecast['yhat'] - future_forecast['yhat_lower']).clip(lower=0),
-            color='#fbbf24',
+            color=theme.FAINT,
             thickness=1.5,
             width=4,
         ),
@@ -167,11 +171,11 @@ def render(filters: dict) -> None:
         fig_bt.add_trace(go.Scatter(
             x=backtest['actuals']['ds'], y=backtest['actuals']['y'],
             mode='lines+markers', name='Tatsächlich',
-            line=dict(color='#60a5fa', width=2)))
+            line=dict(color=theme.CHART_HERO, width=2)))
         fig_bt.add_trace(go.Scatter(
             x=backtest['forecast']['ds'], y=backtest['forecast']['yhat'],
             mode='lines+markers', name='Forecast (Backtest)',
-            line=dict(color='#f59e0b', width=2, dash='dash')))
+            line=dict(color=theme.MUTED, width=2, dash='dash')))
         fig_bt.add_trace(go.Scatter(
             x=pd.concat([backtest['forecast']['ds'], backtest['forecast']['ds'].iloc[::-1]]),
             y=pd.concat([backtest['forecast']['yhat_upper'], backtest['forecast']['yhat_lower'].iloc[::-1]]),
@@ -185,8 +189,12 @@ def render(filters: dict) -> None:
     # ── Saisonalitäts-Decomposition ──────────────────────────────────────────
     if 'trend' in forecast.columns:
         st.divider()
+        st.caption(
+            "Prophet zerlegt den Forecast in Trend + Saisonalität. Der "
+            "Langzeit-Trend ist nach Modell-Design stückweise linear "
+            "(Changepoints) — die saisonale Variation siehst du im Hauptchart."
+        )
         st.subheader("Saisonalitäts-Decomposition", anchor=False)
-        st.caption("Prophet zerlegt den Forecast in einen Langzeit-Trend. Jahres-Saisonalität wird erst ab 12 vollständigen Monaten modelliert.")
 
         col_trend, col_yearly = st.columns(2)
 
@@ -195,7 +203,7 @@ def render(filters: dict) -> None:
             fig_trend.add_trace(go.Scatter(
                 x=forecast['ds'], y=forecast['trend'],
                 mode='lines', name='Trend',
-                line=dict(color='#60a5fa', width=2),
+                line=dict(color=theme.CHART_HERO, width=2),
             ))
             fig_trend.update_layout(
                 title='Langzeit-Trend', height=300,
