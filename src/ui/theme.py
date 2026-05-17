@@ -178,6 +178,64 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(.kpi-card) {{
 }}
 .kpi-delta.is-muted {{ color: {MUTED}; }}
 .kpi-delta-period {{ color: {MUTED}; margin-left: 6px; font-weight: 400; }}
+
+/* ── Agent recommendation card (src/ui/agent_panel.py) ───────── */
+.agent-card {{
+    border: 1px solid {BORDER};
+    border-left: 4px solid {AI_ACCENT};
+    border-radius: {CARD_RADIUS_REM};
+    background: {AI_BG_TINT};
+    padding: {CARD_PADDING_PX}px;
+    margin: 8px 0 16px;
+}}
+.agent-card.compact {{ padding: 16px 20px; margin: 6px 0 10px; }}
+.agent-marker {{
+    display: flex; align-items: center; gap: 10px;
+    color: {AI_ACCENT};
+    font-family: {FONT_FAMILY};
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+}}
+.agent-sparkle {{ font-size: 16px; line-height: 1; }}
+.agent-title {{
+    color: {HEADING};
+    font-family: {FONT_FAMILY};
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 1.25;
+    margin: 4px 0 8px;
+}}
+.agent-card.compact .agent-title {{ font-size: 16px; margin-bottom: 4px; }}
+.agent-finding {{
+    color: {BODY};
+    font-family: {FONT_FAMILY};
+    font-size: 14px;
+    line-height: 1.5;
+    margin-bottom: 10px;
+}}
+.agent-priority-badge {{
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-left: auto;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-family: {FONT_FAMILY};
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}}
+.agent-priority-badge .dot {{
+    width: 8px; height: 8px; border-radius: 999px;
+}}
+.agent-meta {{
+    color: {MUTED};
+    font-family: {MONO_FAMILY};
+    font-size: 11px;
+    margin-top: 10px;
+}}
 </style>
 """.strip()
 

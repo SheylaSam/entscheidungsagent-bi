@@ -116,3 +116,16 @@ def test_champions_and_loyal_are_positive():
 def test_at_risk_and_lost_are_negative():
     assert theme.SEGMENT_SEMANTICS["At Risk"] == theme.NEGATIVE
     assert theme.SEGMENT_SEMANTICS["Lost"] == theme.NEGATIVE
+
+
+def test_global_css_defines_agent_card_classes():
+    css = theme.global_css()
+    for cls in (".agent-card", ".agent-marker", ".agent-title",
+                ".agent-priority-badge", ".agent-meta", ".agent-finding"):
+        assert cls in css, f"missing rule for {cls}"
+
+
+def test_global_css_agent_marker_uses_ai_accent():
+    css = theme.global_css()
+    assert theme.AI_ACCENT in css
+    assert "4px" in css  # border-left width
