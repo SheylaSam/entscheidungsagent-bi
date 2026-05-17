@@ -11,7 +11,7 @@ import streamlit as st
 from src.data_processing import get_connection
 from src.ui import theme
 from src.ui.cards import kpi_card, prev_period_delta
-from src.ui.legacy_renderers import render_decision_panel, render_action_list
+from src.ui.agent_panel import agent_recommendation_card
 from src.ui.page_loader import forecast_baseline, short_baseline_label
 from src.ui.viz_theme import polish, PLOTLY_CONFIG
 
@@ -76,10 +76,11 @@ def render(filters: dict) -> None:
                   index=pd.DatetimeIndex([future_rows['ds'].iloc[0]])),
     ])
 
-    render_decision_panel(top_rec)
+    agent_recommendation_card(top_rec)
     if len(recs) > 1:
         st.markdown('<div class="section-kicker">Weitere Massnahmen</div>', unsafe_allow_html=True)
-        render_action_list(recs[1:4])
+        for rec in recs[1:4]:
+            agent_recommendation_card(rec, variant='compact')
     c1, c2, c3, c4 = st.columns(4, gap="small")
     with c1:
         kpi_card(
