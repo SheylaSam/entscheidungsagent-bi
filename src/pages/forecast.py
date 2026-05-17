@@ -10,7 +10,7 @@ import streamlit as st
 
 from src.ui import theme
 from src.ui.agent_panel import agent_recommendation_card
-from src.ui.legacy_renderers import render_decision_panel, render_evidence_strip
+from src.ui.legacy_renderers import render_evidence_strip
 from src.ui.page_loader import (
     forecast_baseline, short_baseline_label, load_backtest, load_all,
 )
@@ -155,12 +155,12 @@ def render(filters: dict) -> None:
         accuracy = max(0, 1 - backtest['mape'])
         quality = "hoch" if mape < 0.15 else "mittel" if mape < 0.30 else "niedrig"
         q_priority = "TIEF" if quality == "hoch" else "MITTEL" if quality == "mittel" else "HOCH"
-        render_decision_panel({
+        agent_recommendation_card({
             'priority': q_priority,
             'decision': f'Modellgüte: {quality}.',
             'finding': f'Der Backtest-Fehler liegt bei {mape:.1%} MAPE und £{backtest["mae"]:,.0f} MAE.',
             'reasoning': 'Das Modell wurde auf den letzten drei historischen Monaten geprüft. Je tiefer der Fehler, desto belastbarer die Prognose.',
-        }, "Backtest")
+        })
         render_evidence_strip([
             ("MAPE", f"{mape:.1%}"),
             ("MAE", f"£{backtest['mae']:,.0f}"),
