@@ -584,17 +584,16 @@ with tab2:
         ),
         hovertemplate='%{x|%b %Y}<br>Forecast: £%{y:,.0f}<extra></extra>',
     ))
-    fig.add_hline(y=forecast_base_value, line_dash='dot', line_color='#94a3b8',
-                  annotation_text='Vergleichsbasis', annotation_position='top left')
     fig.update_layout(
         height=430,
         barmode='group',
         xaxis_title='',
-        yaxis_title='Umsatz (£)',
-        legend=dict(orientation='h', yanchor='bottom', y=1.02),
-        margin=dict(t=20, b=10),
+        yaxis_title='',
     )
-    st.plotly_chart(fig, use_container_width=True)
+    fig = polish(fig, y_format=',.0f', reference=forecast_base_value,
+                 reference_label='Vergleichsbasis')
+    st.plotly_chart(fig, use_container_width=True,
+                    theme=None, config=PLOTLY_CONFIG)
 
     forecast_display = future_forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].copy()
     forecast_display['Delta zur Vergleichsbasis'] = (
@@ -652,10 +651,10 @@ with tab2:
             y=pd.concat([backtest['forecast']['yhat_upper'], backtest['forecast']['yhat_lower'].iloc[::-1]]),
             fill='toself', fillcolor='rgba(245,158,11,0.15)',
             line=dict(color='rgba(255,255,255,0)'), name='Konfidenzintervall'))
-        fig_bt.update_layout(height=280, xaxis_title='Monat', yaxis_title='Umsatz (£)',
-                             legend=dict(orientation='h', yanchor='bottom', y=1.02),
-                             margin=dict(t=10))
-        st.plotly_chart(fig_bt, use_container_width=True)
+        fig_bt.update_layout(height=380, xaxis_title='', yaxis_title='')
+        fig_bt = polish(fig_bt, y_format=',.0f')
+        st.plotly_chart(fig_bt, use_container_width=True,
+                        theme=None, config=PLOTLY_CONFIG)
 
     # ── Saisonalitäts-Decomposition ──────────────────────────────────────────
     if 'trend' in forecast.columns:
@@ -674,10 +673,11 @@ with tab2:
             ))
             fig_trend.update_layout(
                 title='Langzeit-Trend', height=300,
-                xaxis_title='Monat', yaxis_title='Umsatz (£)',
-                margin=dict(t=40, b=10),
+                xaxis_title='', yaxis_title='',
             )
-            st.plotly_chart(fig_trend, use_container_width=True)
+            fig_trend = polish(fig_trend, y_format=',.0f')
+            st.plotly_chart(fig_trend, use_container_width=True,
+                            theme=None, config=PLOTLY_CONFIG)
 
         with col_yearly:
             if 'yearly' in forecast.columns:
@@ -695,10 +695,12 @@ with tab2:
                 ))
                 fig_yearly.update_layout(
                     title='Jahreszeitlicher Effekt (Ø pro Monat)', height=300,
-                    xaxis_title='Monat', yaxis_title='Saisonaler Beitrag (£)',
-                    margin=dict(t=40, b=10), showlegend=False,
+                    xaxis_title='', yaxis_title='',
+                    showlegend=False,
                 )
-                st.plotly_chart(fig_yearly, use_container_width=True)
+                fig_yearly = polish(fig_yearly, y_format=',.0f')
+                st.plotly_chart(fig_yearly, use_container_width=True,
+                                theme=None, config=PLOTLY_CONFIG)
 
 # ── Tab 3 ────────────────────────────────────────────────────────────────────
 with tab3:
