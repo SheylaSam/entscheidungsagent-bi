@@ -100,12 +100,59 @@ PLOTLY_CONFIG: dict = {
 }
 
 
-def polish(fig: go.Figure, *, dark: bool = False) -> go.Figure:
-    """Apply the polished template to ``fig``.
+def polish(
+    fig: go.Figure,
+    *,
+    dark: bool = False,
+    y_format: str | None = None,
+    reference: float | None = None,
+    reference_label: str = "Ziel",
+    hide_legend: bool = False,
+) -> go.Figure:
+    """Apply the polished template + optional per-chart niceties.
 
-    Returns the same Figure for fluent chaining. This is the minimal
-    surface; per-chart options (y_format, reference line, hide_legend)
-    are added in Task 5.
+    Parameters
+    ----------
+    fig:
+        The figure to mutate.
+    dark:
+        Apply ``polish_dark`` instead of ``polish_light``.
+    y_format:
+        Plotly tick-format string for the y-axis (e.g. ``",.0f"``,
+        ``"£,.0f"``, ``".1%"``).
+    reference:
+        If given, draw a dotted horizontal reference line at this y
+        value.  Annotated top-right with ``reference_label``.
+    reference_label:
+        Text for the reference-line annotation (only used when
+        ``reference`` is given).
+    hide_legend:
+        Force-hide the legend (use this when you have direct labels).
+
+    Returns
+    -------
+    The same Figure object, for fluent chaining.
     """
     fig.update_layout(template="polish_dark" if dark else "polish_light")
+
+    if y_format is not None:
+        fig.update_yaxes(tickformat=y_format)
+
+    if reference is not None:
+        fig.add_hline(
+            y=reference,
+            line_dash="dot",
+            line_width=1,
+            line_color=theme.FAINT,
+            annotation_text=f"{reference_label}: {reference:,.0f}",
+            annotation_position="top right",
+            annotation_font=dict(
+                size=theme.FONT_SIZES_PX["FOOTNOTE"],
+                color=theme.FAINT,
+            ),
+        )
+
+    if hide_legend:
+        fig.update_layout(showlegend=False)
+
     return fig

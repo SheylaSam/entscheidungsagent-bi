@@ -78,3 +78,36 @@ def test_plotly_config_disables_modebar():
     assert viz_theme.PLOTLY_CONFIG["displayModeBar"] is False
     assert viz_theme.PLOTLY_CONFIG["displaylogo"] is False
     assert viz_theme.PLOTLY_CONFIG["responsive"] is True
+
+
+def test_polish_applies_y_format():
+    fig = go.Figure(go.Bar(x=["a", "b"], y=[1, 2]))
+    viz_theme.polish(fig, y_format=",.0f")
+    assert fig.layout.yaxis.tickformat == ",.0f"
+
+
+def test_polish_adds_reference_line():
+    fig = go.Figure(go.Bar(x=["a", "b"], y=[1, 2]))
+    viz_theme.polish(fig, reference=1.5, reference_label="Ziel")
+    shapes = fig.layout.shapes or ()
+    assert any(s.type == "line" for s in shapes)
+    annotations = fig.layout.annotations or ()
+    assert any("Ziel" in (a.text or "") for a in annotations)
+
+
+def test_polish_without_reference_adds_no_line():
+    fig = go.Figure(go.Bar(x=["a", "b"], y=[1, 2]))
+    viz_theme.polish(fig)
+    assert not (fig.layout.shapes or ())
+
+
+def test_polish_hide_legend():
+    fig = go.Figure(go.Bar(x=["a", "b"], y=[1, 2]))
+    viz_theme.polish(fig, hide_legend=True)
+    assert fig.layout.showlegend is False
+
+
+def test_polish_default_keeps_legend_visible():
+    fig = go.Figure(go.Bar(x=["a", "b"], y=[1, 2]))
+    viz_theme.polish(fig)
+    assert fig.layout.showlegend is not False
