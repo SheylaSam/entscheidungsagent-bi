@@ -221,3 +221,29 @@ def kpi_card(
                 theme=None,
                 config={**PLOTLY_CONFIG, "staticPlot": True},
             )
+
+
+def prev_period_delta(
+    monthly_series: pd.Series,
+    *,
+    window: int = 12,
+) -> "tuple[float, float | None, pd.Series]":
+    """Sum the last ``window`` months and compare to the previous block.
+
+    Returns ``(current_sum, delta_pct, sparkline_series)``.  When fewer
+    than ``2 * window`` data points are available, ``delta_pct`` is
+    ``None`` and the sparkline falls back to whatever data exists.
+    """
+    total_points = len(monthly_series)
+    if total_points < 2 * window:
+        return float(monthly_series.sum()), None, monthly_series
+
+    current = monthly_series.iloc[-window:]
+    previous = monthly_series.iloc[-2 * window : -window]
+    current_sum = float(current.sum())
+    previous_sum = float(previous.sum())
+    if previous_sum == 0:
+        return current_sum, None, current
+
+    delta_pct = (current_sum - previous_sum) / previous_sum * 100.0
+    return current_sum, delta_pct, current

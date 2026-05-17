@@ -103,3 +103,33 @@ def test_sparkline_figure_with_none_returns_none():
 def test_sparkline_figure_empty_series_returns_none():
     assert cards._sparkline_figure(pd.Series([], dtype=float),
                                    trend_positive=True) is None
+
+
+# ── prev_period_delta ───────────────────────────────────────────────────────
+def test_prev_period_delta_simple_doubling():
+    """Previous 12 sum to 100, current 12 sum to 200 → +100.0 %."""
+    idx = pd.date_range("2020-01-01", periods=24, freq="MS")
+    values = [100/12] * 12 + [200/12] * 12
+    series = pd.Series(values, index=idx)
+    current, delta_pct, sparkline = cards.prev_period_delta(series, window=12)
+    assert round(current, 2) == 200.0
+    assert round(delta_pct, 1) == 100.0
+    assert len(sparkline) == 12
+
+
+def test_prev_period_delta_returns_none_when_too_few_points():
+    idx = pd.date_range("2020-01-01", periods=10, freq="MS")
+    series = pd.Series(range(10), index=idx)
+    current, delta_pct, sparkline = cards.prev_period_delta(series, window=12)
+    assert current == series.sum()
+    assert delta_pct is None
+    assert sparkline.equals(series)
+
+
+def test_prev_period_delta_window_4():
+    idx = pd.date_range("2020-01-01", periods=8, freq="MS")
+    series = pd.Series([1, 1, 1, 1, 2, 2, 2, 2], index=idx)
+    current, delta_pct, sparkline = cards.prev_period_delta(series, window=4)
+    assert current == 8
+    assert delta_pct == 100.0
+    assert len(sparkline) == 4
