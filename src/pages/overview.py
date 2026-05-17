@@ -9,6 +9,7 @@ import plotly.express as px
 import streamlit as st
 
 from src.data_processing import get_connection
+from src.ui import theme
 from src.ui.cards import kpi_card, prev_period_delta
 from src.ui.legacy_renderers import render_decision_panel, render_action_list
 from src.ui.page_loader import forecast_baseline, short_baseline_label
@@ -140,13 +141,24 @@ def render(filters: dict) -> None:
     with col_mid:
         st.subheader("Kundensegmente", anchor=False)
         seg_counts = rfm['segment'].value_counts().reset_index()
-        seg_counts.columns = ['Segment', 'Anzahl']
-        color_map = {'Champions': '#4ade80', 'Loyal': '#60a5fa', 'At Risk': '#f59e0b',
-                     'Lost': '#ef4444', 'New': '#a78bfa', 'Others': '#94a3b8'}
-        fig2 = px.bar(seg_counts, x='Anzahl', y='Segment', orientation='h',
-                      color='Segment', color_discrete_map=color_map)
+        # Older pandas calls the count column 'segment' (the column name);
+        # newer pandas calls it 'count'. Normalize.
+        if 'count' in seg_counts.columns:
+            seg_counts = seg_counts.rename(columns={'count': 'Anzahl', 'segment': 'Segment'})
+        else:
+            seg_counts.columns = ['Segment', 'Anzahl']
+        seg_counts = seg_counts.sort_values('Anzahl', ascending=True)
+        # Each row carries its semantic color directly.
+        seg_counts['_color'] = seg_counts['Segment'].map(
+            theme.SEGMENT_SEMANTICS
+        ).fillna(theme.MUTED)
+
+        fig2 = px.bar(
+            seg_counts, x='Anzahl', y='Segment', orientation='h',
+            color='_color', color_discrete_map='identity',
+        )
         fig2.update_layout(height=300, yaxis_title='')
         fig2 = polish(fig2, hide_legend=True)
-        fig2.update_layout(margin=dict(l=90))  # room for "Champions" / "At Risk" labels
+        fig2.update_layout(margin=dict(l=90))
         st.plotly_chart(fig2, use_container_width=True,
                         theme=None, config=PLOTLY_CONFIG)
