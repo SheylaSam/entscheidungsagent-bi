@@ -9,23 +9,37 @@ import streamlit as st
 
 from src.customer_analysis import summarize_segments_by_country
 from src.ui.legacy_renderers import render_decision_panel, render_evidence_strip
-from src.ui.page_loader import load_customer_country
+from src.ui.page_loader import load_all, load_customer_country
 from src.ui.viz_theme import polish, PLOTLY_CONFIG
 
 
 def render(filters: dict) -> None:
     """Render the Kunden page.
 
-    Expects in ``filters``: rfm, start_date, end_date, countries.
+    Expects in ``filters``: start_date, end_date, countries.
+    RFM is always computed on the full dataset history (date filter bypassed).
     """
-    rfm        = filters["rfm"]
+    countries  = filters["countries"]
+    # The At-Risk-by-Country chart legitimately uses the user range
+    # (shows the at-risk share within the period of interest), so we
+    # still need start_date / end_date:
     start_date = filters["start_date"]
     end_date   = filters["end_date"]
-    countries  = filters["countries"]
+
+    # RFM is conventionally computed on the full history (recency =
+    # days since last order, relative to the most recent date in the
+    # dataset).  Bypass the global date filter for the rfm dataframe.
+    _FULL_START = "2009-12-01"
+    _FULL_END   = "2011-12-09"
+    rfm, *_ = load_all(_FULL_START, _FULL_END, countries)
 
     # ── lifted body ──────────────────────────────────────────────────────
     st.title("Kundensegmentierung — RFM-Analyse")
     st.caption("Recency · Frequency · Monetary | Segmente basierend auf Quintil-Scores")
+    st.caption(
+        "RFM nutzt die volle Datenhistorie. Recency = Tage seit letzter "
+        "Bestellung, bezogen auf den jüngsten Datenpunkt 2011-12-09."
+    )
 
     color_map = {'Champions': '#4ade80', 'Loyal': '#60a5fa', 'At Risk': '#f59e0b',
                  'Lost': '#ef4444', 'New': '#a78bfa', 'Others': '#94a3b8'}
