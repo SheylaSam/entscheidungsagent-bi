@@ -22,6 +22,11 @@ from src.ui.legacy_renderers import (
     render_action_list, render_agent_trace, render_guardrails,
     inject_legacy_css,
 )
+from src.ui.page_loader import (
+    get_countries, load_backtest, load_all,
+    load_customer_country, load_monthly_product, load_revenue_by_country,
+    forecast_baseline, short_baseline_label, _json_default,
+)
 
 st.set_page_config(page_title="RetailBI — Entscheidungsagent", layout="wide")
 
@@ -71,16 +76,6 @@ forecast_baseline_mode = st.sidebar.radio(
 st.sidebar.divider()
 
 
-@st.cache_data
-def get_countries() -> list[str]:
-    conn = get_connection()
-    try:
-        df = pd.read_sql("SELECT DISTINCT country FROM transactions ORDER BY country", conn)
-    finally:
-        conn.close()
-    return df['country'].tolist()
-
-
 all_countries = get_countries()
 
 st.sidebar.header("Markt")
@@ -126,95 +121,6 @@ min_product_revenue = st.sidebar.number_input(
 st.sidebar.divider()
 
 
-@st.cache_data
-def load_backtest(start_date: str, end_date: str, countries: tuple) -> dict | None:
-    conn = get_connection()
-    try:
-        from src.forecasting import prepare_monthly_series
-        series = prepare_monthly_series(conn, start_date, end_date, countries)
-    finally:
-        conn.close()
-    return run_backtest(series, holdout_months=3)
-
-
-@st.cache_data
-def load_all(
-    start_date: str,
-    end_date: str,
-    countries: tuple,
-    declining_months: int = 3,
-    top_n: int = 10,
-    min_product_revenue: float = 0,
-):
-    conn = get_connection()
-    try:
-        rfm = load_rfm(conn, start_date, end_date, countries)
-        actuals, forecast = load_forecast(conn, start_date, end_date, countries)
-        top_products, declining = load_product_analysis(
-            conn,
-            start_date,
-            end_date,
-            countries,
-            declining_months,
-            top_n,
-            min_product_revenue,
-        )
-    finally:
-        conn.close()
-    return rfm, actuals, forecast, top_products, declining
-
-
-@st.cache_data
-def load_customer_country(start_date: str, end_date: str, countries: tuple) -> pd.DataFrame:
-    conn = get_connection()
-    try:
-        df = load_primary_customer_country(conn, start_date, end_date, countries)
-    finally:
-        conn.close()
-    return df
-
-
-@st.cache_data
-def load_monthly_product(start_date: str, end_date: str, countries: tuple):
-    conn = get_connection()
-    try:
-        df = pd.read_sql(
-            f"""SELECT description, strftime('%Y-%m-01', invoice_date) as month,
-                       SUM(revenue) as revenue
-                FROM transactions
-                WHERE invoice_date >= ? AND invoice_date <= ?
-                AND country IN ({','.join(['?']*len(countries))})
-                GROUP BY description, month
-                ORDER BY month""",
-            conn,
-            params=(start_date, end_date + ' 23:59:59') + countries,
-        )
-    finally:
-        conn.close()
-    df['month'] = pd.to_datetime(df['month'])
-    return df
-
-
-@st.cache_data
-def load_revenue_by_country(start_date: str, end_date: str, countries: tuple) -> pd.DataFrame:
-    conn = get_connection()
-    try:
-        df = pd.read_sql(
-            f"""SELECT country, SUM(revenue) as revenue, COUNT(DISTINCT customer_id) as customers
-                FROM transactions
-                WHERE invoice_date >= ? AND invoice_date <= ?
-                AND country IN ({','.join(['?']*len(countries))})
-                AND customer_id IS NOT NULL
-                GROUP BY country
-                ORDER BY revenue DESC""",
-            conn,
-            params=(start_date, end_date + ' 23:59:59') + countries,
-        )
-    finally:
-        conn.close()
-    return df
-
-
 rfm, actuals, forecast, top_products, declining = load_all(
     start_date.isoformat(),
     end_date.isoformat(),
@@ -249,25 +155,6 @@ recs = generate_recommendations(
     comparison_value=agent_forecast_base,
 )
 
-
-def _json_default(value):
-    if hasattr(value, 'isoformat'):
-        return value.isoformat()
-    if hasattr(value, 'item'):
-        return value.item()
-    return str(value)
-
-
-def forecast_baseline(actuals_df: pd.DataFrame, mode: str) -> tuple[float, str]:
-    if mode == "Durchschnitt letzte 3 Monate" and len(actuals_df) >= 3:
-        return actuals_df.tail(3)['y'].mean(), "Ø der letzten 3 vollständigen Ist-Monate"
-    return actuals_df['y'].iloc[-1], "letzter vollständiger Ist-Monat"
-
-
-def short_baseline_label(label: str) -> str:
-    if label.startswith("Ø"):
-        return "Ø letzte 3 Monate"
-    return "Letzter Ist-Monat"
 
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "Übersicht", "Forecast", "Kunden RFM", "Produkte", "KI-Entscheid", "Chat-Agent"
