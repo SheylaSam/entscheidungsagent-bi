@@ -130,3 +130,94 @@ def _sparkline_figure(
     fig.update_xaxes(visible=False, fixedrange=True)
     fig.update_yaxes(visible=False, fixedrange=True)
     return fig
+
+
+def kpi_card(
+    *,
+    label: str,
+    value: "float | int | None",
+    value_format: str = "{:,.0f}",
+    delta_pct: "float | None" = None,
+    delta_period: str = "",
+    higher_is_better: bool = True,
+    sparkline: "pd.Series | None" = None,
+    sparkline_split_at: "int | None" = None,
+    tooltip: "str | None" = None,
+) -> None:
+    """Render one KPI card.
+
+    Call inside an ``st.columns(...)`` cell or any other container.
+    The function emits a bordered ``st.container`` containing a
+    label row, the big number, a delta+period line, and (optionally)
+    a sparkline.
+
+    Parameters
+    ----------
+    label:
+        Short uppercase metric name (e.g. "Gesamtumsatz").
+    value:
+        The metric's current value, or ``None`` to render an em-dash.
+    value_format:
+        Python format-spec string, applied via ``.format(value)``.
+    delta_pct:
+        Percentage delta vs. the comparison window (8.1 means +8.1 %).
+        Pass ``None`` to omit the delta line entirely.
+    delta_period:
+        Comparison phrase ("vs. letzte 12 Monate"), rendered to the
+        right of the percentage.
+    higher_is_better:
+        Inverts color semantics when False (used for at-risk
+        customers, churn, costs).
+    sparkline:
+        Numeric pandas Series for the embedded sparkline. ``None`` →
+        no sparkline rendered (slot stays empty so layout doesn't
+        shift).
+    sparkline_split_at:
+        Index where the sparkline switches from solid to dashed (used
+        by the forecast card to mark the actual→forecast boundary).
+    tooltip:
+        Optional native browser-tooltip text on the ⓘ icon next to
+        the label.
+    """
+    import streamlit as st  # lazy: keep cards.py importable without ST
+
+    value_str = _format_value(value, value_format)
+    delta_str = _delta_text(delta_pct, delta_period)
+    delta_color = _delta_color(delta_pct, higher_is_better=higher_is_better)
+    trend_positive = (delta_pct is not None and delta_pct >= 0) == higher_is_better
+
+    tooltip_span = (
+        f'<span class="kpi-tooltip" title="{tooltip}">&#9432;</span>'
+        if tooltip else ""
+    )
+    delta_html = (
+        f'<div class="kpi-delta" style="color:{delta_color}">'
+        f'{delta_str}<span class="kpi-delta-period">{delta_period}</span>'
+        f'</div>'
+    ) if delta_str else '<div class="kpi-delta">&nbsp;</div>'
+
+    body = (
+        f'<div class="kpi-card">'
+        f'  <div class="kpi-label">'
+        f'    <span class="kpi-label-text">{label}</span>{tooltip_span}'
+        f'  </div>'
+        f'  <div class="kpi-number">{value_str}</div>'
+        f'  {delta_html}'
+        f'</div>'
+    )
+
+    with st.container(border=True):
+        st.markdown(body, unsafe_allow_html=True)
+        fig = _sparkline_figure(
+            sparkline,
+            trend_positive=trend_positive,
+            split_at=sparkline_split_at,
+        )
+        if fig is not None:
+            from src.ui.viz_theme import PLOTLY_CONFIG  # avoid top-level cycle
+            st.plotly_chart(
+                fig,
+                use_container_width=True,
+                theme=None,
+                config={**PLOTLY_CONFIG, "staticPlot": True},
+            )
