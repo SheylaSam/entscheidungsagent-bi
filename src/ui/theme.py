@@ -237,6 +237,19 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(.kpi-card) {{
     margin-top: 10px;
 }}
 
+/* ── Sidebar inputs: keep readable on dark background ─────────── */
+[data-testid="stSidebar"] input[type="number"],
+[data-testid="stSidebar"] input[type="text"],
+[data-testid="stSidebar"] textarea {{
+    color: {HEADING} !important;
+    background: {BG_PAGE} !important;
+}}
+[data-testid="stSidebar"] [data-testid="stTooltipIcon"],
+[data-testid="stSidebar"] [data-testid="stTooltipIcon"] svg {{
+    color: rgba(255,255,255,0.6) !important;
+    opacity: 1 !important;
+}}
+
 /* ── Chat bubbles ─────────────────────────────────────────────── */
 [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-assistant"]) {{
     background: {AI_BG_TINT};

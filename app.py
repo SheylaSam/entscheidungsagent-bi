@@ -44,9 +44,8 @@ _MIN_DATE = date(2009, 12, 1)
 _MAX_DATE = date(2011, 12, 9)
 _DEFAULT_START = date(2011, 6, 1)
 
-st.sidebar.header("Zeitraum")
 date_range = st.sidebar.slider(
-    "Datumsbereich",
+    "Zeitraum",
     min_value=_MIN_DATE,
     max_value=_MAX_DATE,
     value=(_DEFAULT_START, _MAX_DATE),
@@ -58,9 +57,6 @@ start_date, end_date = date_range
 if (end_date - start_date).days < 180:
     st.warning("Bitte mindestens 6 Monate auswählen, damit der Forecast aussagekräftig berechnet werden kann.")
     st.stop()
-st.sidebar.caption(
-    f"{start_date.strftime('%d.%m.%Y')} – {end_date.strftime('%d.%m.%Y')}"
-)
 st.sidebar.divider()
 
 st.sidebar.header("Forecast")
