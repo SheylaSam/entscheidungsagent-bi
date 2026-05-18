@@ -10,6 +10,7 @@ import streamlit as st
 
 from src.data_processing import DB_PATH, build_database, get_connection
 from src.ui.cards import kpi_card
+from src.ui.dataset_io import validate_uploaded_dataframe, replace_database_from_dataframe
 
 
 def render(filters: dict) -> None:
@@ -90,12 +91,73 @@ def render(filters: dict) -> None:
     st.subheader("Speicherort", anchor=False)
     st.code(str(DB_PATH.resolve()))
 
-    # ── Rebuild action ────────────────────────────────────────────────────
-    st.subheader("Aktionen", anchor=False)
-    if st.button("Datenbank neu aufbauen",
-                 help="Liest die Excel-Quelle erneut und schreibt SQLite "
-                      "neu (~30–90 Sekunden beim ersten Mal)."):
-        with st.spinner("Importiere Daten…"):
-            build_database()
-        st.success("Datenbank wurde neu aufgebaut.")
-        st.rerun()
+    # ── Standard-Datensatz ───────────────────────────────────────────────
+    st.subheader("Standard-Datensatz", anchor=False)
+    st.markdown(
+        "Online Retail II vom UCI ML Repository (~45 MB). "
+        "Wird beim ersten App-Start automatisch heruntergeladen."
+    )
+    col_a, col_b = st.columns([1, 3])
+    with col_a:
+        if st.button("Neu laden",
+                     help="Löscht die lokale DB und lädt das Original "
+                          "neu von der UCI-Quelle."):
+            from src.data_processing import EXCEL_PATH
+            DB_PATH.unlink(missing_ok=True)
+            EXCEL_PATH.unlink(missing_ok=True)
+            with st.spinner("Lade Datensatz von UCI…"):
+                try:
+                    build_database()
+                except Exception as exc:                       # noqa: BLE001
+                    st.error(f"Download fehlgeschlagen: {exc}")
+                else:
+                    st.cache_data.clear()
+                    st.success("Standard-Datensatz neu geladen.")
+                    st.rerun()
+    with col_b:
+        st.caption("Setzt die aktive Datenbank auf den Stand 2009–2011 zurück.")
+
+    # ── Eigener Datensatz ────────────────────────────────────────────────
+    st.subheader("Eigener Datensatz", anchor=False)
+    st.markdown(
+        "Lade eine Excel-Datei (`.xlsx`) im Online-Retail-II-Schema hoch. "
+        "Erwartete Spalten: `Invoice, StockCode, Description, Quantity, "
+        "InvoiceDate, Price, Customer ID, Country` — auf einem oder "
+        "mehreren Tabellenblättern."
+    )
+    uploaded = st.file_uploader(
+        "Datei wählen",
+        type=["xlsx"],
+        accept_multiple_files=False,
+        key="data_source_upload",
+    )
+    if uploaded is not None:
+        try:
+            sheets = pd.read_excel(uploaded, sheet_name=None)
+            combined = pd.concat(sheets.values(), ignore_index=True)
+        except Exception as exc:                              # noqa: BLE001
+            st.error(f"Konnte Datei nicht lesen: {exc}")
+            return
+
+        ok, errors = validate_uploaded_dataframe(combined)
+        if not ok:
+            for err in errors:
+                st.error(err)
+            return
+
+        st.success(
+            f"Schema OK — {len(combined):,} Zeilen, "
+            f"{combined['Country'].nunique()} Länder."
+        )
+        st.markdown("**Vorschau (erste 5 Zeilen):**")
+        st.dataframe(combined.head(), use_container_width=True, hide_index=True)
+
+        if st.button("Datenbank ersetzen",
+                     type="primary",
+                     help="Achtung: ersetzt die aktive Datenbank. "
+                          "Du kannst jederzeit zurück zum Standard wechseln."):
+            with st.spinner("Schreibe neue Datenbank…"):
+                replace_database_from_dataframe(combined)
+            st.cache_data.clear()
+            st.success("Eigener Datensatz aktiv. Lade die anderen Seiten neu.")
+            st.rerun()
