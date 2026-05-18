@@ -19,7 +19,8 @@ def test_page_keys_exact_order():
     """Order in PAGE_KEYS drives sidebar item order — pin it."""
     assert navigation.PAGE_KEYS == (
         "overview", "forecast", "customers", "products",
-        "agent_recs", "chat",
+        "agent_recs", "agent_history", "chat",
+        "data_source", "settings",
     )
 
 
@@ -30,3 +31,9 @@ def test_sidebar_nav_is_callable():
     a deeper smoke happens via `streamlit run app.py` after Task 11.
     """
     assert callable(navigation.sidebar_nav)
+
+
+def test_system_pages_in_labels():
+    for key in ("data_source", "settings"):
+        assert key in navigation.PAGE_LABELS
+        assert key in navigation.PAGE_KEYS

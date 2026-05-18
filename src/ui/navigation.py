@@ -14,26 +14,33 @@ import streamlit_antd_components as sac
 
 PAGE_KEYS: tuple[str, ...] = (
     "overview", "forecast", "customers", "products",
-    "agent_recs", "chat",
+    "agent_recs", "agent_history", "chat",
+    "data_source", "settings",
 )
 
 PAGE_LABELS: dict[str, str] = {
-    "overview":   "Übersicht",
-    "forecast":   "Forecast",
-    "customers":  "Kunden",
-    "products":   "Produkte",
-    "agent_recs": "Empfehlungen",
-    "chat":       "Chat-Agent",
+    "overview":      "Übersicht",
+    "forecast":      "Forecast",
+    "customers":     "Kunden",
+    "products":      "Produkte",
+    "agent_recs":    "Empfehlungen",
+    "agent_history": "Verlauf",
+    "chat":          "Chat-Agent",
+    "data_source":   "Datenquelle",
+    "settings":      "Einstellungen",
 }
 
 # Bootstrap-icon names (used by streamlit-antd-components by default).
 _PAGE_ICONS: dict[str, str] = {
-    "overview":   "bar-chart",
-    "forecast":   "graph-up",
-    "customers":  "people",
-    "products":   "box",
-    "agent_recs": "stars",
-    "chat":       "chat-dots",
+    "overview":      "bar-chart",
+    "forecast":      "graph-up",
+    "customers":     "people",
+    "products":      "box",
+    "agent_recs":    "stars",
+    "agent_history": "clock-history",
+    "chat":          "chat-dots",
+    "data_source":   "database",
+    "settings":      "gear",
 }
 
 DEFAULT_PAGE: str = "overview"
@@ -48,8 +55,13 @@ def _menu_items() -> list:
             sac.MenuItem(PAGE_LABELS["products"],   icon=_PAGE_ICONS["products"]),
         ]),
         sac.MenuItem(label="AGENT", type="group", children=[
-            sac.MenuItem(PAGE_LABELS["agent_recs"], icon=_PAGE_ICONS["agent_recs"]),
-            sac.MenuItem(PAGE_LABELS["chat"],       icon=_PAGE_ICONS["chat"]),
+            sac.MenuItem(PAGE_LABELS["agent_recs"],    icon=_PAGE_ICONS["agent_recs"]),
+            sac.MenuItem(PAGE_LABELS["agent_history"], icon=_PAGE_ICONS["agent_history"]),
+            sac.MenuItem(PAGE_LABELS["chat"],          icon=_PAGE_ICONS["chat"]),
+        ]),
+        sac.MenuItem(label="SYSTEM", type="group", children=[
+            sac.MenuItem(PAGE_LABELS["data_source"], icon=_PAGE_ICONS["data_source"]),
+            sac.MenuItem(PAGE_LABELS["settings"],    icon=_PAGE_ICONS["settings"]),
         ]),
     ]
 
