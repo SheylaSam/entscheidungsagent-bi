@@ -17,7 +17,10 @@ from src.pages import (
     customers,
     products,
     agent_recommendations,
+    agent_history,
     chat,
+    data_source,
+    settings,
 )
 from src.ui.navigation import sidebar_nav
 
@@ -180,12 +183,15 @@ filters = {
 }
 
 PAGES = {
-    "overview":   overview.render,
-    "forecast":   forecast_page.render,
-    "customers":  customers.render,
-    "products":   products.render,
-    "agent_recs": agent_recommendations.render,
-    "chat":       chat.render,
+    "overview":      overview.render,
+    "forecast":      forecast_page.render,
+    "customers":     customers.render,
+    "products":      products.render,
+    "agent_recs":    agent_recommendations.render,
+    "agent_history": agent_history.render,
+    "chat":          chat.render,
+    "data_source":   data_source.render,
+    "settings":      settings.render,
 }
 
 PAGES[active_page](filters)

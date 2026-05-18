@@ -9,7 +9,10 @@ PAGE_MODULES = [
     "src.pages.customers",
     "src.pages.products",
     "src.pages.agent_recommendations",
+    "src.pages.agent_history",
     "src.pages.chat",
+    "src.pages.data_source",
+    "src.pages.settings",
 ]
 
 
