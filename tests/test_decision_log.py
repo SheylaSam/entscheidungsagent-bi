@@ -78,7 +78,11 @@ def test_load_agent_run_round_trips_a_persisted_run(tmp_path):
     run = _sample_run()
     log_agent_run(run, log_dir=tmp_path)
     loaded = load_agent_run(run['run_id'], log_dir=tmp_path)
-    assert loaded['recommendations'] == run['recommendations']
+    # evidence_rows is a DataFrame on the way out and a list-of-dicts after
+    # round-trip — compare on the JSON-stable subset of the rec dict instead.
+    def _stable(recs):
+        return [{k: v for k, v in r.items() if k != 'evidence_rows'} for r in recs]
+    assert _stable(loaded['recommendations']) == _stable(run['recommendations'])
     assert loaded['guardrails'] == run['guardrails']
 
 

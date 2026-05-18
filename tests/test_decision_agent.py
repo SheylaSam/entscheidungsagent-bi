@@ -148,7 +148,47 @@ def test_negative_forecast_returns_mittel():
 def test_recommendation_has_required_keys():
     recs = generate_recommendations(make_forecast_decline(), make_rfm_high_at_risk(), make_declining_products())
     for r in recs:
-        assert {'priority', 'finding', 'decision', 'reasoning'}.issubset(r.keys())
+        assert {'priority', 'finding', 'decision', 'reasoning',
+                'rule', 'rec_id', 'timestamp', 'source_version'}.issubset(r.keys())
+
+
+def test_rule_tags_are_assigned_per_rule():
+    recs = generate_recommendations(
+        make_forecast_decline(), make_rfm_high_at_risk(), make_declining_products()
+    )
+    tags = {r['rule'] for r in recs}
+    # R1 (forecast+at-risk) and R2 (declining products) must fire on this fixture
+    assert {'R1', 'R2'}.issubset(tags)
+
+
+def test_evidence_rows_attached_for_at_risk_rule():
+    recs = generate_recommendations(
+        make_forecast_decline(), make_rfm_high_at_risk(), make_declining_products()
+    )
+    r1 = next(r for r in recs if r['rule'] == 'R1')
+    assert 'evidence_rows' in r1
+    assert len(r1['evidence_rows']) > 0
+
+
+def test_evidence_rows_attached_for_declining_products_rule():
+    recs = generate_recommendations(
+        make_forecast_decline(), make_rfm_high_at_risk(), make_declining_products()
+    )
+    r2 = next(r for r in recs if r['rule'] == 'R2')
+    assert 'evidence_rows' in r2
+    assert len(r2['evidence_rows']) > 0
+
+
+def test_rec_id_is_stable_for_same_rule():
+    recs_a = generate_recommendations(
+        make_forecast_decline(), make_rfm_high_at_risk(), make_declining_products()
+    )
+    recs_b = generate_recommendations(
+        make_forecast_decline(), make_rfm_high_at_risk(), make_declining_products()
+    )
+    ids_a = {r['rule']: r['rec_id'] for r in recs_a}
+    ids_b = {r['rule']: r['rec_id'] for r in recs_b}
+    assert ids_a == ids_b
 
 
 def test_agent_thresholds_document_rule_defaults():

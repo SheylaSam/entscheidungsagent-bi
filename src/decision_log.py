@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 
 DEFAULT_LOG_DIR = Path("logs/agent_runs")
@@ -30,6 +31,8 @@ class _RunEncoder(json.JSONEncoder):
             return bool(obj)
         if isinstance(obj, np.ndarray):
             return obj.tolist()
+        if isinstance(obj, pd.DataFrame):
+            return obj.to_dict(orient='records')
         if isinstance(obj, (datetime,)):
             return obj.isoformat()
         return super().default(obj)

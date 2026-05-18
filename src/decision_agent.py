@@ -1,7 +1,10 @@
+import hashlib
 import pandas as pd
 from datetime import datetime, timezone
 
 from src.semantic import AgentThresholds, UtilityScore  # re-exported for backward compatibility
+
+SOURCE_VERSION = "rules v0.5"
 
 __all__ = [
     'AgentThresholds',
@@ -14,8 +17,22 @@ __all__ = [
 ]
 
 
-def _make_rec(priority: str, finding: str, decision: str, reasoning: str, utility: UtilityScore) -> dict:
-    return {
+def _make_rec(
+    *,
+    rule: str,
+    priority: str,
+    finding: str,
+    decision: str,
+    reasoning: str,
+    utility: UtilityScore,
+    evidence_rows: 'pd.DataFrame | None' = None,
+) -> dict:
+    rec_id = hashlib.sha1(f"{rule}|{decision}".encode("utf-8")).hexdigest()[:8]
+    rec: dict = {
+        'rule': rule,
+        'rec_id': rec_id,
+        'timestamp': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+        'source_version': SOURCE_VERSION,
         'priority': priority,
         'finding': finding,
         'decision': decision,
@@ -27,6 +44,9 @@ def _make_rec(priority: str, finding: str, decision: str, reasoning: str, utilit
             'confidence': utility.confidence,
         },
     }
+    if evidence_rows is not None and len(evidence_rows) > 0:
+        rec['evidence_rows'] = evidence_rows
+    return rec
 
 
 def _forecast_context(forecast_df, actuals_df=None, comparison_value: float | None = None) -> dict:
@@ -118,6 +138,7 @@ def compute_agent_kpis(
         'total_monetary': total_monetary,
         'avg_monetary': avg_monetary,
         'significant_declining': significant_declining,
+        'rfm_df': rfm_df,
     }
 
 
@@ -200,7 +221,17 @@ def _rule_forecast_at_risk(kpis: dict, thresholds: AgentThresholds) -> dict | No
         urgency=1.0,
         confidence=_forecast_confidence(kpis['actual_months']),
     )
+    rfm_df = kpis.get('rfm_df')
+    at_risk_rows = None
+    if rfm_df is not None and 'segment' in rfm_df.columns:
+        at_risk_rows = (
+            rfm_df[rfm_df['segment'] == 'At Risk']
+            .sort_values('monetary', ascending=False)
+            .head(10)[[c for c in ('customer_id', 'recency', 'frequency', 'monetary') if c in rfm_df.columns]]
+            .reset_index(drop=True)
+        )
     return _make_rec(
+        rule='R1',
         priority='HOCH',
         finding=f'Umsatz-Forecast zeigt {pct_change:.1%} Rückgang nächsten Monat.',
         decision='Reaktivierungskampagne für At-Risk-Kunden starten.',
@@ -209,6 +240,7 @@ def _rule_forecast_at_risk(kpis: dict, thresholds: AgentThresholds) -> dict | No
             f"\"At Risk\" — kombiniert mit sinkendem Forecast erhöht sich Abwanderungsrisiko."
         ),
         utility=utility,
+        evidence_rows=at_risk_rows,
     )
 
 
@@ -220,7 +252,10 @@ def _rule_declining_products(kpis: dict, thresholds: AgentThresholds) -> dict | 
     expected_impact = monthly_loss * 12
     utility = UtilityScore(expected_impact_gbp=expected_impact, urgency=0.7, confidence=0.8)
     product_list = ', '.join(significant['description'].head(5).tolist())
+    evidence_cols = [c for c in ('description', 'stock_code', 'revenue_avg', 'revenue_last_month') if c in significant.columns]
+    evidence = significant[evidence_cols].head(10).reset_index(drop=True) if evidence_cols else None
     return _make_rec(
+        rule='R2',
         priority='MITTEL',
         finding=(
             f'{len(significant)} Produkte zeigen ≥3 Monate rückläufigen Umsatz und '
@@ -229,6 +264,7 @@ def _rule_declining_products(kpis: dict, thresholds: AgentThresholds) -> dict | 
         decision='Sortiment bereinigen: betroffene Produkte prüfen und ggf. absetzen.',
         reasoning=f'Betroffene Produkte: {product_list}.',
         utility=utility,
+        evidence_rows=evidence,
     )
 
 
@@ -239,6 +275,7 @@ def _rule_low_champion_share(kpis: dict, thresholds: AgentThresholds) -> dict | 
     expected_impact = gap * kpis['customer_count'] * kpis['avg_monetary']
     utility = UtilityScore(expected_impact_gbp=expected_impact, urgency=0.4, confidence=0.7)
     return _make_rec(
+        rule='R3',
         priority='MITTEL',
         finding=(
             f"Champion-Anteil zu niedrig: nur {kpis['champion_share']:.1%} der Kunden sind "
@@ -258,6 +295,7 @@ def _rule_low_new_customers(kpis: dict, thresholds: AgentThresholds) -> dict | N
     expected_impact = gap * kpis['customer_count'] * kpis['avg_monetary'] * 0.5
     utility = UtilityScore(expected_impact_gbp=expected_impact, urgency=0.4, confidence=0.6)
     return _make_rec(
+        rule='R4',
         priority='MITTEL',
         finding=(
             f"Neukunden-Anteil kritisch niedrig: nur {kpis['new_share']:.1%} der Kunden sind "
@@ -275,12 +313,23 @@ def _rule_top20_concentration(kpis: dict, thresholds: AgentThresholds) -> dict |
     # Annahme: 20% des konzentrierten Umsatzes sind bei Abwanderung eines Grosskunden gefährdet.
     expected_impact = kpis['top20_share'] * kpis['total_monetary'] * 0.20
     utility = UtilityScore(expected_impact_gbp=expected_impact, urgency=0.5, confidence=0.9)
+    rfm_df = kpis.get('rfm_df')
+    top_rows = None
+    if rfm_df is not None and len(rfm_df) >= 5:
+        top_n = max(1, int(len(rfm_df) * 0.2))
+        cols = [c for c in ('customer_id', 'segment', 'monetary') if c in rfm_df.columns]
+        top_rows = (
+            rfm_df.sort_values('monetary', ascending=False).head(top_n)[cols]
+            .head(10).reset_index(drop=True)
+        )
     return _make_rec(
+        rule='R5',
         priority='MITTEL',
         finding=f"Klumpenrisiko: Top 20% der Kunden generieren {kpis['top20_share']:.0%} des Umsatzes.",
         decision='Kundenstamm diversifizieren: Abhängigkeit von wenigen Schlüsselkunden reduzieren.',
         reasoning='Hohe Umsatzkonzentration bedeutet hohes Risiko — der Verlust weniger Grosskunden kann den Gesamtumsatz stark beeinflussen.',
         utility=utility,
+        evidence_rows=top_rows,
     )
 
 
@@ -301,6 +350,7 @@ _ZERO_UTILITY = UtilityScore(expected_impact_gbp=0.0, urgency=0.0, confidence=1.
 
 def _data_thin_recommendation(kpis: dict) -> dict:
     return _make_rec(
+        rule='G1',
         priority='MITTEL',
         finding=f"Datenbasis zu dünn: nur {kpis['customer_count']} Kunden im gewählten Zeitraum/Land.",
         decision='Filter anpassen oder breiteren Zeitraum wählen.',
@@ -311,6 +361,7 @@ def _data_thin_recommendation(kpis: dict) -> dict:
 
 def _negative_forecast_recommendation(next_forecast: float) -> dict:
     return _make_rec(
+        rule='G2',
         priority='MITTEL',
         finding=f'Prophet-Forecast liefert negativen Umsatz (£{next_forecast:,.0f}) — nicht plausibel.',
         decision='Datenbasis prüfen: zu wenige Monate oder zu wenig Umsatz für zuverlässige Prognose.',
@@ -323,6 +374,7 @@ def _no_action_recommendation(kpis: dict) -> dict:
     pct_change = kpis['forecast']['pct_change']
     pct_str = f"{pct_change:+.1%}" if pct_change is not None else "n/a"
     return _make_rec(
+        rule='R6',
         priority='TIEF',
         finding=f"Forecast: {pct_str}. Champion-Anteil: {kpis['champion_share']:.1%}.",
         decision='Kein unmittelbarer Handlungsbedarf.',
