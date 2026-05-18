@@ -83,13 +83,19 @@ data_processing.py  ──►  SQLite (.db)
 
 ## Dashboard-Struktur
 
-| Tab | Inhalt |
-|---|---|
-| Ubersicht | KPI-Metriken (Gesamtumsatz, aktive Kunden, At-Risk-Kunden, Forecast); Umsatz-Trend-Balkendiagramm; Kundensegmente-Übersicht; Top-KI-Empfehlung |
-| Forecast | 3-Monats-Ausblick mit Forecast-Interpretation, wählbarer Vergleichsbasis, Unsicherheitsband und Backtest-Modellgüte |
-| Kunden RFM | RFM-Scatter-Plot (Recency vs. Frequency, Grösse = Monetary); Segmenttabelle mit Anzahl und Umsatz; Top 10 At-Risk-Kunden |
-| Produkte | Top-10-Produkte nach Umsatz (ohne Versand/Gebühren/Korrekturen); Liste signifikant rückläufiger Produkte (≥3 Monate Rückgang + letzter Monat <50% Durchschnitt); Produkt-Drilldown |
-| KI-Entscheid | Alle Empfehlungen des Entscheidungsagenten mit Befund, Entscheid und Begründung; Live-Regelstatus; Agentic Trace; Guardrails; Human-in-the-Loop-Freigabe; Session-Memory; JSON-Export; anpassbare Schwellwerte für Regel 1 |
+Die Navigation läuft über eine Sidebar mit drei Gruppen — *Analytics*, *Agent*, *System*.
+
+| Gruppe | Seite | Inhalt |
+|---|---|---|
+| Analytics | Übersicht | Vier KPI-Karten (Gesamtumsatz, aktive Kunden, At-Risk-Kunden, Forecast) mit Sparkline und Δ%-Vergleich; Umsatz-Trend; Kundensegmente; Top-KI-Empfehlung |
+| Analytics | Forecast | 3-Monats-Ausblick (Prophet, piecewise-linear) mit wählbarer Vergleichsbasis, Unsicherheitsband und Backtest-Modellgüte |
+| Analytics | Kunden | RFM-Scatter (Recency × Frequency, Grösse = Monetary); Segmenttabelle; Top-10-At-Risk-Liste; Segmente nach Land |
+| Analytics | Produkte | Top-N-Produkte nach Umsatz; signifikant rückläufige Produkte (≥3 Monate Rückgang + letzter Monat < 50 % Durchschnitt); Produkt-Drilldown |
+| Agent | Empfehlungen | Alle Agent-Empfehlungen als Karten mit Befund, Entscheid, Begründung, Evidence-Drilldown (Regel-Tag, Nutzen-Score, betroffene Kunden/Produkte) sowie Akzeptieren/Verwerfen/👍/👎 |
+| Agent | Verlauf | Persistierter Entscheidungs-Log (JSON) mit Outcome-Metriken aus der Critic-Komponente |
+| Agent | Chat | Natural-Language-Chat mit Suggestion-Chips, der die Tools des Agenten deterministisch aufruft |
+| System | Datenquelle | UCI-Auto-Download für den Standard-Datensatz, plus Upload eines eigenen Datensatzes im selben Schema |
+| System | Einstellungen | Schwellwerte und Service-Aktionen |
 
 ---
 
@@ -99,16 +105,16 @@ Der Entscheidungsagent (`src/decision_agent.py`) kombiniert drei Datenquellen un
 
 | Regel | Bedingung | Entscheid | Priorität |
 |---|---|---|---|
-| 1 | Forecast < -5% UND At-Risk-Anteil > 20% der Kundenbasis | Reaktivierungskampagne für At-Risk-Kunden starten | HOCH |
-| 2 | ≥1 Produkt mit ≥3 Monaten rückläufigem Umsatz | Sortiment bereinigen: betroffene Produkte prüfen und ggf. absetzen | MITTEL |
-| 3 | Champion-Anteil < 10% der Kundenbasis | Kundenbindungsprogramm aufbauen: Loyal-Kunden zu Champions entwickeln | MITTEL |
-| 4 | Neukunden-Anteil < 5% der Kundenbasis | Neukundenakquisition ausbauen: Marketing-Kanäle und Erstbestellangebote prüfen | MITTEL |
-| 5 | Top-20%-Kunden generieren >80% des Umsatzes | Kundenstamm diversifizieren: Abhängigkeit von Schlüsselkunden reduzieren | MITTEL |
-| 6 | Keine der obigen Regeln trifft zu | Kein unmittelbarer Handlungsbedarf | TIEF |
+| R1 | Forecast < -5% UND At-Risk-Anteil > 20% der Kundenbasis | Reaktivierungskampagne für At-Risk-Kunden starten | HOCH |
+| R2 | ≥1 Produkt mit ≥3 Monaten rückläufigem Umsatz | Sortiment bereinigen: betroffene Produkte prüfen und ggf. absetzen | MITTEL |
+| R3 | Champion-Anteil < 10% der Kundenbasis | Kundenbindungsprogramm aufbauen: Loyal-Kunden zu Champions entwickeln | MITTEL |
+| R4 | Neukunden-Anteil < 5% der Kundenbasis | Neukundenakquisition ausbauen: Marketing-Kanäle und Erstbestellangebote prüfen | MITTEL |
+| R5 | Top-20%-Kunden generieren >80% des Umsatzes | Kundenstamm diversifizieren: Abhängigkeit von Schlüsselkunden reduzieren | MITTEL |
+| R6 | Keine der obigen Regeln trifft zu | Kein unmittelbarer Handlungsbedarf | TIEF |
 
-Die Regeln werden sequenziell geprüft; mehrere Empfehlungen (z.B. Regel 1 + 2 + 3 gleichzeitig) sind möglich. Jede Empfehlung enthält **Befund**, **Entscheid** und **Begründung** mit konkreten Datenpunkten aus der Analyse.
+Die Regeln werden sequenziell geprüft; mehrere Empfehlungen (z.B. R1 + R2 + R3 gleichzeitig) sind möglich. Jede Empfehlung enthält **Befund**, **Entscheid**, **Begründung** sowie einen Regel-Tag, einen Utility-Score und — wo es Sinn ergibt — eine Evidence-Tabelle mit den konkret betroffenen Kunden bzw. Produkten.
 
-Die Standard-Schwellwerte sind im Code als `AgentThresholds` dokumentiert. Regel 1 kann im Dashboard live angepasst werden; die übrigen Regeln bleiben bewusst deterministisch, damit Empfehlungen reproduzierbar und auditierbar bleiben.
+Die Standard-Schwellwerte sind im Code als `AgentThresholds` dokumentiert. R1 kann im Dashboard live angepasst werden; die übrigen Regeln bleiben bewusst deterministisch, damit Empfehlungen reproduzierbar und auditierbar bleiben.
 
 Zusätzlich erzeugt `generate_agent_run()` einen auditierbaren Agentenlauf mit:
 
@@ -125,23 +131,4 @@ Zusätzlich erzeugt `generate_agent_run()` einen auditierbaren Agentenlauf mit:
 pytest -q
 ```
 
-Aktueller Stand: **48 Tests** für Datenbereinigung, RFM, Forecasting, Produktfilter, Länderlogik, Entscheidungsregeln und Agent-Run-Metadaten.
-
----
-
-## Screenshots
-
-**Tab 1 — Übersicht**
-![Übersicht](docs/screenshots/tab1-uebersicht.png)
-
-**Tab 2 — Forecast**
-![Forecast](docs/screenshots/tab2-forecast.png)
-
-**Tab 3 — Kunden RFM**
-![Kunden RFM](docs/screenshots/tab3-rfm.png)
-
-**Tab 4 — Produkte**
-![Produkte](docs/screenshots/tab4-produkte.png)
-
-**Tab 5 — KI-Entscheid**
-![KI-Entscheid](docs/screenshots/tab5-ki.png)
+Aktueller Stand: **194 Tests** über Datenbereinigung, RFM, Forecasting, Produktfilter, Länderlogik, Entscheidungsregeln, Agent-Run-Metadaten, Datensatz-Upload, UI-Komponenten (Karten, Theme, Navigation, Agent-Panel, Chat) und Page-Smoke-Tests.
