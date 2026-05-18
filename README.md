@@ -13,27 +13,25 @@ Regelbasiertes Business-Intelligence-Dashboard mit KI-Entscheidungsagent für de
 
 ---
 
-## Setup (Schritt-für-Schritt)
+## Quickstart
 
 ```bash
-# 1. Repository klonen
 git clone <repo-url>
 cd Entscheidungsagent-BI
-
-# 2. Excel-Datei herunterladen
-#    → https://archive.ics.uci.edu/dataset/502/online+retail+ii
-#    → Datei speichern als:
-mkdir -p data
-# data/online_retail_II.xlsx
-
-# 3. Abhängigkeiten installieren
 pip install -r requirements.txt
-
-# 4. Dashboard starten (SQLite-DB wird beim ersten Start automatisch generiert)
 streamlit run app.py
 ```
 
 Das Dashboard ist danach unter http://localhost:8501 erreichbar.
+
+Beim **ersten Start** lädt die App den Online-Retail-II-Datensatz automatisch
+vom UCI ML Repository herunter (~45 MB, ~30–90 Sekunden). Danach steht
+ein lokaler SQLite-Snapshot unter `data/retail.db` zur Verfügung — alle
+weiteren Starts sind sofort verfügbar.
+
+**Eigene Daten:** Auf der Seite *Datenquelle* (Sidebar → System) kannst
+du eine andere Excel-Datei im selben Online-Retail-II-Schema hochladen
+und die aktive Datenbank ersetzen.
 
 ---
 
