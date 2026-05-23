@@ -1,0 +1,28 @@
+# This file is GENERATED from src/ui/theme.py via
+# scripts/render_streamlit_config.py.  Do not edit by hand.
+# To change a value: edit src/ui/theme.py, then run `make config`.
+
+[theme]
+base = "light"
+primaryColor = "#6C5CE7"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F8FAFC"
+textColor = "#0F172A"
+borderColor = "#E2E8F0"
+linkColor = "#6C5CE7"
+baseRadius = "0.75rem"
+buttonRadius = "0.5rem"
+showWidgetBorder = false
+showSidebarBorder = true
+dataframeHeaderBackgroundColor = "#F8FAFC"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"
+headingFont = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"
+codeFont = "JetBrains Mono:https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
+chartCategoricalColors = ["#0072B2", "#E69F00", "#009E73", "#CC79A7", "#56B4E9", "#6B7280"]
+chartSequentialColors = ["#EFF6FF", "#BFDBFE", "#60A5FA", "#2563EB", "#1E3A8A"]
+
+[theme.sidebar]
+backgroundColor = "#0F1020"
+textColor = "#FFFFFF"
+primaryColor = "#6C5CE7"
+baseRadius = "0.5rem"

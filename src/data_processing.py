@@ -1,9 +1,47 @@
+import io
 import sqlite3
-import pandas as pd
+import zipfile
 from pathlib import Path
+from urllib.request import urlopen
+
+import pandas as pd
 
 DB_PATH = Path("data/retail.db")
 EXCEL_PATH = Path("data/online_retail_II.xlsx")
+
+UCI_URL = "https://archive.ics.uci.edu/static/public/502/online+retail+ii.zip"
+
+
+def fetch_uci_dataset(
+    excel_path: str | Path = EXCEL_PATH,
+    *,
+    url: str = UCI_URL,
+) -> None:
+    """Download the Online Retail II dataset from UCI if not present.
+
+    No-op when ``excel_path`` already exists.  Otherwise downloads the
+    canonical zip, extracts the first ``.xlsx`` entry, and writes it to
+    ``excel_path``.  Network errors propagate so callers can surface a
+    clear "no internet?" message.
+    """
+    target = Path(excel_path)
+    if target.exists():
+        return
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    with urlopen(url, timeout=60) as response:  # noqa: S310
+        data = response.read()
+
+    with zipfile.ZipFile(io.BytesIO(data)) as zf:
+        xlsx_names = [n for n in zf.namelist() if n.lower().endswith(".xlsx")]
+        if not xlsx_names:
+            raise RuntimeError(
+                f"UCI zip at {url} did not contain an .xlsx file "
+                f"(got {zf.namelist()!r})"
+            )
+        with zf.open(xlsx_names[0]) as src, target.open("wb") as dst:
+            dst.write(src.read())
 
 COLUMN_MAP = {
     'Invoice': 'invoice',
@@ -69,9 +107,13 @@ def date_range_params(start_date: str, end_date: str) -> tuple[str, str]:
 
 
 def build_database(excel_path: str | Path = EXCEL_PATH, db_path: str | Path = DB_PATH) -> None:
-    """Import Excel → SQLite. Skips if DB already exists."""
+    """Import Excel → SQLite. Skips if DB already exists.
+
+    Auto-downloads the Excel from the UCI ML Repository when missing.
+    """
     if Path(db_path).exists():
         return
+    fetch_uci_dataset(excel_path=excel_path)
     sheets = pd.read_excel(excel_path, sheet_name=None)
     combined = pd.concat(sheets.values(), ignore_index=True)
     clean = clean_dataframe(combined)

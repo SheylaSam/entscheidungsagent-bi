@@ -148,7 +148,47 @@ def test_negative_forecast_returns_mittel():
 def test_recommendation_has_required_keys():
     recs = generate_recommendations(make_forecast_decline(), make_rfm_high_at_risk(), make_declining_products())
     for r in recs:
-        assert {'priority', 'finding', 'decision', 'reasoning'}.issubset(r.keys())
+        assert {'priority', 'finding', 'decision', 'reasoning',
+                'rule', 'rec_id', 'timestamp', 'source_version'}.issubset(r.keys())
+
+
+def test_rule_tags_are_assigned_per_rule():
+    recs = generate_recommendations(
+        make_forecast_decline(), make_rfm_high_at_risk(), make_declining_products()
+    )
+    tags = {r['rule'] for r in recs}
+    # R1 (forecast+at-risk) and R2 (declining products) must fire on this fixture
+    assert {'R1', 'R2'}.issubset(tags)
+
+
+def test_evidence_rows_attached_for_at_risk_rule():
+    recs = generate_recommendations(
+        make_forecast_decline(), make_rfm_high_at_risk(), make_declining_products()
+    )
+    r1 = next(r for r in recs if r['rule'] == 'R1')
+    assert 'evidence_rows' in r1
+    assert len(r1['evidence_rows']) > 0
+
+
+def test_evidence_rows_attached_for_declining_products_rule():
+    recs = generate_recommendations(
+        make_forecast_decline(), make_rfm_high_at_risk(), make_declining_products()
+    )
+    r2 = next(r for r in recs if r['rule'] == 'R2')
+    assert 'evidence_rows' in r2
+    assert len(r2['evidence_rows']) > 0
+
+
+def test_rec_id_is_stable_for_same_rule():
+    recs_a = generate_recommendations(
+        make_forecast_decline(), make_rfm_high_at_risk(), make_declining_products()
+    )
+    recs_b = generate_recommendations(
+        make_forecast_decline(), make_rfm_high_at_risk(), make_declining_products()
+    )
+    ids_a = {r['rule']: r['rec_id'] for r in recs_a}
+    ids_b = {r['rule']: r['rec_id'] for r in recs_b}
+    assert ids_a == ids_b
 
 
 def test_agent_thresholds_document_rule_defaults():
@@ -166,7 +206,7 @@ def test_generate_agent_run_contains_trace_evidence_and_guardrails():
         make_declining_products(),
         actuals_df=make_actuals(),
     )
-    assert run['agent_type'] == 'Regelbasierter BI-Agent mit Human-in-the-Loop'
+    assert run['agent_type'] == 'Utility-basierter BI-Agent mit Human-in-the-Loop'
     assert len(run['recommendations']) >= 1
     assert len(run['trace']) >= 6
     assert {'baseline_revenue', 'next_forecast', 'at_risk_share'}.issubset(run['evidence'])
@@ -244,3 +284,34 @@ def test_guardrails_block_negative_forecast_so_no_business_rule_fires():
     # recommendation is produced — none of the 5 business rules.
     assert len(recs) == 1
     assert 'negativ' in recs[0]['finding'].lower()
+
+
+# ── Utility scoring (utility-based agent) ────────────────────────────────────
+
+def test_every_recommendation_carries_a_utility_score():
+    recs = generate_recommendations(make_forecast_decline(), make_rfm_high_at_risk(), make_declining_products(), actuals_df=make_actuals())
+    for r in recs:
+        assert 'utility' in r and isinstance(r['utility'], (int, float))
+        assert 'utility_components' in r
+        for key in ('expected_impact_gbp', 'urgency', 'confidence'):
+            assert key in r['utility_components']
+
+
+def test_recommendations_are_sorted_by_utility_descending():
+    recs = generate_recommendations(make_forecast_decline(), make_rfm_high_at_risk(), make_declining_products(), actuals_df=make_actuals())
+    utilities = [r['utility'] for r in recs]
+    assert utilities == sorted(utilities, reverse=True)
+
+
+def test_high_priority_rec_has_higher_utility_than_no_action():
+    recs_high = generate_recommendations(make_forecast_decline(), make_rfm_high_at_risk(), make_no_declining(), actuals_df=make_actuals())
+    recs_green = generate_recommendations(make_forecast_stable(), make_rfm_high_champions(), make_no_declining(), actuals_df=make_actuals())
+    assert recs_high[0]['utility'] > recs_green[0]['utility']
+    assert recs_green[0]['priority'] == 'TIEF'
+    assert recs_green[0]['utility'] == 0.0
+
+
+def test_evidence_exposes_top_utility_for_dashboard():
+    run = generate_agent_run(make_forecast_decline(), make_rfm_high_at_risk(), make_declining_products(), actuals_df=make_actuals())
+    assert run['evidence']['top_utility_gbp'] == run['recommendations'][0]['utility']
+    assert run['evidence']['top_utility_gbp'] > 0

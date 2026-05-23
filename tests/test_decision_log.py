@@ -2,6 +2,7 @@ import json
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from src.decision_agent import generate_agent_run
 from src.decision_log import list_agent_runs, load_agent_run, log_agent_run
@@ -31,7 +32,7 @@ def test_log_agent_run_persists_run_as_json(tmp_path):
     with path.open() as f:
         data = json.load(f)
     assert data['run_id'] == run['run_id']
-    assert data['agent_type'] == 'Regelbasierter BI-Agent mit Human-in-the-Loop'
+    assert data['agent_type'] == 'Utility-basierter BI-Agent mit Human-in-the-Loop'
     assert len(data['recommendations']) == len(run['recommendations'])
 
 
@@ -77,5 +78,28 @@ def test_load_agent_run_round_trips_a_persisted_run(tmp_path):
     run = _sample_run()
     log_agent_run(run, log_dir=tmp_path)
     loaded = load_agent_run(run['run_id'], log_dir=tmp_path)
-    assert loaded['recommendations'] == run['recommendations']
+    # evidence_rows is a DataFrame on the way out and a list-of-dicts after
+    # round-trip — compare on the JSON-stable subset of the rec dict instead.
+    def _stable(recs):
+        return [{k: v for k, v in r.items() if k != 'evidence_rows'} for r in recs]
+    assert _stable(loaded['recommendations']) == _stable(run['recommendations'])
     assert loaded['guardrails'] == run['guardrails']
+
+
+def test_log_feedback_writes_jsonl(tmp_path):
+    from src.decision_log import log_feedback
+    log_file = tmp_path / "feedback.jsonl"
+    log_feedback("rec-abc", "up", log_path=log_file)
+    log_feedback("rec-abc", "down", log_path=log_file)
+    lines = log_file.read_text().strip().splitlines()
+    assert len(lines) == 2
+    first = json.loads(lines[0])
+    assert first["rec_id"] == "rec-abc"
+    assert first["vote"] == "up"
+    assert "timestamp" in first
+
+
+def test_log_feedback_rejects_unknown_vote(tmp_path):
+    from src.decision_log import log_feedback
+    with pytest.raises(ValueError):
+        log_feedback("rec-1", "maybe", log_path=tmp_path / "feedback.jsonl")
